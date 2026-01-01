@@ -1,1 +1,3 @@
 .qr-env/
+*.egg-info
+*__PYCACHE__*
