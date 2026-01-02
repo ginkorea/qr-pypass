@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass generator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>qr-pypass generator</h1>
+  <p class="muted">Generate payloads (URL/Text/TOTP) and render them as QR codes.</p>
+
+  <div class="card">
+    <div class="row">
+      <label>type
+        <select id="kind">
+          <option value="url">URL</option>
+          <option value="text">Text</option>
+          <option value="totp">TOTP (otpauth)</option>
+        </select>
+      </label>
+      <label class="row" style="gap:8px;">
+        <input id="doImport" type="checkbox" />
+        import (TOTP only)
+      </label>
+      <input id="passphrase" type="password" placeholder="passphrase (optional)" />
+      <button id="btnGen" type="button">Generate</button>
+    </div>
+
+    <div id="fields" style="margin-top:12px;"></div>
+
+    <p id="status" class="muted"></p>
+  </div>
+
+  <div id="out"></div>
+
+  <script src="{{ url_for('static', filename='gen.js') }}"></script>
+</body>
+</html>
