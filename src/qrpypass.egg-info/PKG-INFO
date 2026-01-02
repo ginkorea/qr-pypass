@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: qrpypass
+Version: 0.1.0
+Summary: Headless QR decoder + TOTP authenticator Flask mini-service
+Author: Josh Gompert
+Author-email: 
+Requires-Python: >=3.9
+Dynamic: author
+Dynamic: requires-python
+Dynamic: summary

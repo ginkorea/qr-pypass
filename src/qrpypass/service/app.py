@@ -1,30 +1,47 @@
 from __future__ import annotations
 
+import io
 import os
 import tempfile
-import io 
-import qrcode
 from typing import Any, Dict
 
+import qrcode
 from flask import Flask, jsonify, request, render_template, send_file
 
 from qrpypass.qr import scan_and_classify
 
 from qrpypass.auth import (
-    parse_otpauth_uri, totp_now,
-    load_accounts, save_accounts,
-    StoreError, OTPAuthError
+    parse_otpauth_uri,
+    totp_now,
+    load_accounts,
+    save_accounts,
+    StoreError,
+    OTPAuthError,
 )
 
 from qrpypass.generate import generate_payload
 
 
 def create_app() -> Flask:
-    app = Flask(__name__)
+    # Ensure Flask can always locate templates/static in this package
+    here = os.path.dirname(__file__)
+    templates_dir = os.path.join(here, "templates")
+    static_dir = os.path.join(here, "static")
+
+    app = Flask(
+        __name__,
+        template_folder=templates_dir,
+        static_folder=static_dir,
+        static_url_path="/static",
+    )
 
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.get("/gen")
+    def gen_page():
+        return render_template("gen.html")
 
     @app.get("/health")
     def health():
@@ -44,16 +61,14 @@ def create_app() -> Flask:
         if not f.filename:
             return jsonify({"error": "empty filename"}), 400
 
-        # max_results (optional)
         max_results = request.form.get("max_results", "8")
         try:
             max_results_i = int(max_results)
-            if max_results_i < 1 or max_results_i > 50:
+            if not (1 <= max_results_i <= 50):
                 return jsonify({"error": "max_results must be between 1 and 50"}), 400
         except ValueError:
             return jsonify({"error": "max_results must be an integer"}), 400
 
-        # Save to a temp file so OpenCV can reliably read it
         suffix = os.path.splitext(f.filename)[1].lower() or ".img"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name
@@ -61,12 +76,8 @@ def create_app() -> Flask:
 
         try:
             hits = scan_and_classify(tmp_path, max_results=max_results_i)
-            return jsonify({
-                "count": len(hits),
-                "results": [h.to_dict() for h in hits],
-            })
+            return jsonify({"count": len(hits), "results": [h.to_dict() for h in hits]})
         except Exception as e:
-            # Keep error message for dev; later we can gate with DEBUG flag
             return jsonify({"error": str(e)}), 500
         finally:
             try:
@@ -74,14 +85,14 @@ def create_app() -> Flask:
             except Exception:
                 pass
 
-    return app
-
     @app.get("/auth/list")
     def auth_list():
         passphrase = request.args.get("passphrase")  # optional
         try:
             accounts = load_accounts(passphrase=passphrase)
-            return jsonify({"count": len(accounts), "accounts": [a.safe_dict() for a in accounts.values()]})
+            return jsonify(
+                {"count": len(accounts), "accounts": [a.safe_dict() for a in accounts.values()]}
+            )
         except StoreError as e:
             return jsonify({"error": str(e)}), 400
 
@@ -105,11 +116,7 @@ def create_app() -> Flask:
 
         try:
             accounts = load_accounts(passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
-        accounts[acc.id] = acc
-        try:
+            accounts[acc.id] = acc
             save_accounts(accounts, passphrase=passphrase)
         except StoreError as e:
             return jsonify({"error": str(e)}), 400
@@ -138,23 +145,19 @@ def create_app() -> Flask:
             return jsonify({"error": "Unknown id"}), 404
 
         code, remaining = totp_now(acc)
-        return jsonify({
-            "account": acc.safe_dict(),
-            "code": code,
-            "seconds_remaining": remaining,
-        })
+        return jsonify({"account": acc.safe_dict(), "code": code, "seconds_remaining": remaining})
 
     @app.post("/gen/payload")
     def gen_payload():
         """
         JSON:
           { "kind": "url|text|totp", "params": {...}, "import": false, "passphrase": "optional" }
+
         For totp: if import=true, store into authenticator store.
         """
         data = request.get_json(silent=True) or {}
-        kind = data.get("kind", "")
+        kind = (data.get("kind") or "").strip()
         params = data.get("params", {}) or {}
-
         do_import = bool(data.get("import", False))
         passphrase = data.get("passphrase")
 
@@ -165,7 +168,6 @@ def create_app() -> Flask:
 
         imported = None
         if do_import and gp.kind.value == "otpauth_totp":
-            # reuse existing importer
             try:
                 acc = parse_otpauth_uri(gp.payload)
                 accounts = load_accounts(passphrase=passphrase)
@@ -188,24 +190,25 @@ def create_app() -> Flask:
         if not payload:
             return jsonify({"error": "payload is required"}), 400
 
-        box_size = int(data.get("box_size", 8))
-        border = int(data.get("border", 2))
-        if box_size < 2 or box_size > 20:
+        try:
+            box_size = int(data.get("box_size", 8))
+            border = int(data.get("border", 2))
+        except ValueError:
+            return jsonify({"error": "box_size and border must be integers"}), 400
+
+        if not (2 <= box_size <= 20):
             return jsonify({"error": "box_size must be between 2 and 20"}), 400
-        if border < 0 or border > 10:
+        if not (0 <= border <= 10):
             return jsonify({"error": "border must be between 0 and 10"}), 400
 
         qr = qrcode.QRCode(box_size=box_size, border=border)
         qr.add_data(payload)
         qr.make(fit=True)
-        img = qr.make_image()
 
+        img = qr.make_image()  # PIL image via qrcode[pil]
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
         return send_file(buf, mimetype="image/png")
 
-    @app.get("/gen")
-    def gen_page():
-        return render_template("gen.html")
-
+    return app

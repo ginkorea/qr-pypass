@@ -1,0 +1,55 @@
+/* Base darkmode theme */
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 24px;
+  max-width: 980px;
+}
+
+.card {
+  border: 1px solid CanvasText;
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.muted {
+  opacity: 0.65;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid CanvasText;
+  font-family: ui-monospace, monospace;
+}
+
+button {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid CanvasText;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input[type="number"],
+input[type="password"],
+input[type="file"],
+textarea {
+  font-family: inherit;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid CanvasText;
+}
