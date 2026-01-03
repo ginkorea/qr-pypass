@@ -23,11 +23,6 @@ __pycache__/
 .ruff_cache/
 *.cache
 
-# Images (you want them locally but not committed)
-images/*.png
-images/*.jpg
-images/*.jpeg
-
 # OS files
 .DS_Store
 Thumbs.db

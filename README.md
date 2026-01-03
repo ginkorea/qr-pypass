@@ -1,3 +1,5 @@
+![qr-pypass logo](images/qr-logo.png)
+
 # qr-pypass
 
 **qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service built for **offline-first security workflows**.
