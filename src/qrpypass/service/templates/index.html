@@ -1,28 +1,20 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>qr-pypass</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <h1>qr-pypass</h1>
-  <p class="muted">Upload a screenshot (PNG/JPG). The server will find and decode QR codes, then classify the payload.</p>
+<div class="card">
+  <form id="uploadForm" class="row">
+    <input id="file" type="file" accept="image/*" required />
 
-  <div class="card">
-    <form id="uploadForm" class="row">
-      <input id="file" type="file" accept="image/*" required />
-      <label>max_results
-        <input id="maxResults" type="number" min="1" max="50" value="8" />
-      </label>
-      <button type="submit">Scan</button>
-    </form>
-    <p id="status" class="muted"></p>
-  </div>
+    <label>max_results
+      <input id="maxResults" type="number" min="1" max="50" value="8" />
+    </label>
 
-  <div id="results"></div>
+    <label class="row" style="gap:8px;">
+      <input id="autoImportOtp" type="checkbox" checked />
+      auto-import otpauth
+    </label>
 
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
-</body>
-</html>
+    <input id="passphrase" type="password" placeholder="store passphrase (optional)" />
+
+    <button type="submit">Scan</button>
+  </form>
+
+  <p id="status" class="muted"></p>
+</div>
