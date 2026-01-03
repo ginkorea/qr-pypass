@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass vault</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="row" style="justify-content:space-between;">
+    <h1>Vault</h1>
+    <div class="row">
+      <a href="{{ url_for('index') }}">Scan</a>
+      <a href="{{ url_for('gen_page') }}">Generate</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
+  </div>
+
+  <p class="muted">Your stored authenticators. Click to show live code.</p>
+
+  <div class="card">
+    <div id="vault"></div>
+    <p id="status" class="muted"></p>
+  </div>
+
+  <script>
+    async function getJson(url){
+      const r = await fetch(url, {method:"GET"});
+      const d = await r.json().catch(() => ({}));
+      return {ok:r.ok, status:r.status, data:d};
+    }
+
+    const vaultEl = document.getElementById("vault");
+    const statusEl = document.getElementById("status");
+    const intervals = new Set();
+
+    function stopAll(){ for (const i of intervals) clearInterval(i); intervals.clear(); }
+
+    function esc(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+    async function refreshOne(id){
+      const res = await getJson(`/auth/code?id=${encodeURIComponent(id)}`);
+      if (!res.ok) return null;
+      return res.data;
+    }
+
+    async function load(){
+      stopAll();
+      statusEl.textContent = "Loading...";
+      const res = await getJson("/auth/list");
+      if (!res.ok){
+        statusEl.textContent = "Error loading vault.";
+        return;
+      }
+      const accts = res.data.accounts || [];
+      statusEl.textContent = `Accounts: ${accts.length}`;
+
+      vaultEl.innerHTML = accts.map(a => `
+        <div class="card">
+          <div><b>${esc(a.issuer || "")}</b> ${esc(a.name || "")}</div>
+          <div class="muted">id: ${esc(a.id)}</div>
+          <div style="margin-top:10px;" class="row">
+            <button type="button" data-id="${esc(a.id)}">Show code</button>
+            <div style="font-size:26px; font-family: ui-monospace, monospace;" id="code-${esc(a.id)}">—</div>
+            <div class="muted" id="rem-${esc(a.id)}"></div>
+          </div>
+        </div>
+      `).join("");
+
+      vaultEl.querySelectorAll("button[data-id]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-id");
+          const codeEl = document.getElementById(`code-${id}`);
+          const remEl  = document.getElementById(`rem-${id}`);
+
+          async function tick(){
+            const d = await refreshOne(id);
+            if (!d) return;
+            codeEl.textContent = d.code || "—";
+            remEl.textContent = (typeof d.seconds_remaining === "number") ? `refresh in ${d.seconds_remaining}s` : "";
+          }
+
+          await tick();
+          const intv = setInterval(tick, 1000);
+          intervals.add(intv);
+        });
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>

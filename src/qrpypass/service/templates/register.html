@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass register</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>Create account</h1>
+
+  <div class="card">
+    <form method="POST" class="row">
+      <input name="email" type="email" placeholder="email" required style="min-width:320px;" />
+      <input name="password" type="password" placeholder="password (>= 10 chars)" required style="min-width:280px;" />
+      <button type="submit">Register</button>
+    </form>
+
+    <p class="muted" style="margin-top:10px;">
+      Already have an account? <a href="{{ url_for('login') }}">Login</a>
+    </p>
+
+    {% if error %}
+      <p style="margin-top:10px;">❌ {{ error }}</p>
+    {% endif %}
+  </div>
+</body>
+</html>
