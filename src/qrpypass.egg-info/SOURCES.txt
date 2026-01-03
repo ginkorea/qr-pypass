@@ -22,3 +22,4 @@ src/qrpypass/qr/decode.py
 src/qrpypass/qr/models.py
 src/qrpypass/qr/pipeline.py
 src/qrpypass/qr/scan.py
+test/test_totp_verify_flow.py

@@ -27,3 +27,7 @@ class OTPAuthAccount:
             "digits": self.digits,
             "period": self.period,
         }
+
+
+# Backwards-compatible alias (your totp.py was importing OTPAccount)
+OTPAccount = OTPAuthAccount

@@ -1,3 +1,37 @@
+# Environments
 .qr-env/
-*.egg-info
-*__PYCACHE__*
+.venv/
+env/
+venv/
+*.env
+
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+*.whl
+*.egg
+MANIFEST
+
+# Byte-compiled files & caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.cache
+
+# Images (you want them locally but not committed)
+images/*.png
+images/*.jpg
+images/*.jpeg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

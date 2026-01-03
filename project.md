@@ -5,10 +5,10 @@
 | Metric | Value |
 |:--|:--|
 | Root Directory | `/home/gompert/data/workspace/qr-pypass` |
-| Total Directories | 11 |
-| Total Indexed Files | 32 |
-| Skipped Files | 1 |
-| Indexed Size | 41.18 KB |
+| Total Directories | 13 |
+| Total Indexed Files | 35 |
+| Skipped Files | 5 |
+| Indexed Size | 58.86 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
@@ -23,6 +23,7 @@
 - [src/qrpypass.egg-info/top_level.txt](#src-qrpypass-egg-info-top-level-txt)
 - [src/qrpypass/__init__.py](#src-qrpypass-init-py)
 - [src/qrpypass/auth/__init__.py](#src-qrpypass-auth-init-py)
+- [src/qrpypass/auth/generate.py](#src-qrpypass-auth-generate-py)
 - [src/qrpypass/auth/models.py](#src-qrpypass-auth-models-py)
 - [src/qrpypass/auth/otpauth.py](#src-qrpypass-auth-otpauth-py)
 - [src/qrpypass/auth/store.py](#src-qrpypass-auth-store-py)
@@ -45,16 +46,20 @@
 - [src/qrpypass/service/static/style.css](#src-qrpypass-service-static-style-css)
 - [src/qrpypass/service/templates/gen.html](#src-qrpypass-service-templates-gen-html)
 - [src/qrpypass/service/templates/index.html](#src-qrpypass-service-templates-index-html)
+- [test/api-test.py](#test-api-test-py)
+- [test/test_totp_verify_flow.py](#test-test-totp-verify-flow-py)
 
 ## 📂 Project Structure
 
 ```
 📁 images/
     📄 qr.png
+    📄 test.png
 📁 src/
     📁 qrpypass/
         📁 auth/
             📄 __init__.py
+            📄 generate.py
             📄 models.py
             📄 otpauth.py
             📄 store.py
@@ -89,6 +94,13 @@
         📄 PKG-INFO
         📄 SOURCES.txt
         📄 top_level.txt
+📁 test/
+    📁 api_test_out/
+        📄 text.png
+        📄 totp.png
+        📄 url.png
+    📄 api-test.py
+    📄 test_totp_verify_flow.py
 📄 gitignore
 📄 project.md
 📄 README.md
@@ -105,9 +117,43 @@
 ## `gitignore`
 
 ```text
+# Environments
 .qr-env/
-*.egg-info
-*__PYCACHE__*
+.venv/
+env/
+venv/
+*.env
+
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+*.whl
+*.egg
+MANIFEST
+
+# Byte-compiled files & caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.cache
+
+# Images (you want them locally but not committed)
+images/*.png
+images/*.jpg
+images/*.jpeg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
 
 ```
 
@@ -168,6 +214,7 @@ src/qrpypass.egg-info/SOURCES.txt
 src/qrpypass.egg-info/dependency_links.txt
 src/qrpypass.egg-info/top_level.txt
 src/qrpypass/auth/__init__.py
+src/qrpypass/auth/generate.py
 src/qrpypass/auth/models.py
 src/qrpypass/auth/otpauth.py
 src/qrpypass/auth/store.py
@@ -183,6 +230,7 @@ src/qrpypass/qr/decode.py
 src/qrpypass/qr/models.py
 src/qrpypass/qr/pipeline.py
 src/qrpypass/qr/scan.py
+test/test_totp_verify_flow.py
 ```
 
 ## `src/qrpypass.egg-info/dependency_links.txt`
@@ -202,8 +250,8 @@ qrpypass
 ## `src/qrpypass/__init__.py`
 
 ```python
-from .models import GenKind, GeneratedPayload
-from .payloads import generate_payload, generate_text, generate_url, generate_totp
+from .generate.models import GenKind, GeneratedPayload
+from .generate.payloads import generate_payload, generate_text, generate_url, generate_totp
 
 __all__ = ["GenKind", "GeneratedPayload", "generate_payload", "generate_text", "generate_url", "generate_totp"]
 
@@ -214,8 +262,9 @@ __all__ = ["GenKind", "GeneratedPayload", "generate_payload", "generate_text", "
 ```python
 from .models import OTPAuthAccount
 from .otpauth import OTPAuthError, parse_otpauth_uri
-from .totp import totp_now
+from .totp import totp_now, totp_verify
 from .store import load_accounts, save_accounts, default_store_path, StoreError
+from .generate import generate_totp_secret_b32, build_otpauth_uri
 
 __all__ = [
     "OTPAuthAccount",
@@ -227,6 +276,79 @@ __all__ = [
     "default_store_path",
     "StoreError",
 ]
+
+```
+
+## `src/qrpypass/auth/generate.py`
+
+```python
+from __future__ import annotations
+
+import base64
+import os
+from urllib.parse import quote
+
+
+def generate_totp_secret_b32(*, nbytes: int = 20) -> str:
+    """
+    Generate a random TOTP secret in Base32 (uppercase, no padding).
+    Default: 20 bytes (160-bit), common for TOTP.
+    """
+    if not (10 <= nbytes <= 64):
+        raise ValueError("nbytes must be between 10 and 64")
+
+    raw = os.urandom(nbytes)
+    # base32 includes '=', strip padding for otpauth URIs
+    return base64.b32encode(raw).decode("ascii").rstrip("=").upper()
+
+
+def build_otpauth_uri(
+    *,
+    issuer: str,
+    account_name: str,
+    secret_b32: str,
+    digits: int = 6,
+    period: int = 30,
+    algorithm: str = "SHA1",
+) -> str:
+    """
+    Build an otpauth://totp provisioning URI.
+
+    Label: "Issuer:Account"
+    Query: secret, issuer, algorithm, digits, period
+    """
+    issuer = (issuer or "").strip()
+    account_name = (account_name or "").strip()
+    secret_b32 = (secret_b32 or "").strip().replace(" ", "").upper()
+
+    if not issuer:
+        raise ValueError("issuer is required")
+    if not account_name:
+        raise ValueError("account_name is required")
+    if not secret_b32:
+        raise ValueError("secret_b32 is required")
+
+    algorithm = (algorithm or "SHA1").upper()
+    if algorithm not in {"SHA1", "SHA256", "SHA512"}:
+        raise ValueError("algorithm must be SHA1, SHA256, or SHA512")
+
+    if digits not in {6, 7, 8}:
+        raise ValueError("digits must be 6, 7, or 8")
+    if not (5 <= int(period) <= 300):
+        raise ValueError("period must be between 5 and 300 seconds")
+
+    # Label is commonly "Issuer:Account"
+    label = f"{issuer}:{account_name}"
+    label_enc = quote(label, safe="")
+
+    return (
+        f"otpauth://totp/{label_enc}"
+        f"?secret={quote(secret_b32, safe='')}"
+        f"&issuer={quote(issuer, safe='')}"
+        f"&algorithm={quote(algorithm, safe='')}"
+        f"&digits={int(digits)}"
+        f"&period={int(period)}"
+    )
 
 ```
 
@@ -509,59 +631,101 @@ def save_accounts(accounts: Dict[str, OTPAuthAccount], path: Optional[Path] = No
 from __future__ import annotations
 
 import base64
-import hashlib
+import binascii
 import hmac
-import struct
+import hashlib
 import time
 from typing import Tuple
 
-from .models import OTPAuthAccount
+from .models import OTPAccount
 
 
-def _b32decode(secret_b32: str) -> bytes:
-    # base64.b32decode is strict about padding; we can pad ourselves.
-    s = secret_b32.strip().replace(" ", "").upper()
+def _b32_decode_nopad(secret_b32: str) -> bytes:
+    s = (secret_b32 or "").strip().replace(" ", "").upper()
+    # add padding if needed
     pad = (-len(s)) % 8
     s += "=" * pad
-    return base64.b32decode(s, casefold=True)
+    try:
+        return base64.b32decode(s, casefold=True)
+    except binascii.Error as e:
+        raise ValueError("Invalid base32 secret") from e
 
 
-def _hash_for_alg(alg: str):
-    alg = (alg or "SHA1").upper()
-    if alg == "SHA1":
-        return hashlib.sha1
-    if alg == "SHA256":
-        return hashlib.sha256
-    if alg == "SHA512":
-        return hashlib.sha512
-    raise ValueError(f"Unsupported algorithm: {alg}")
+def _hotp(key: bytes, counter: int, digits: int, algo: str) -> str:
+    algo_u = (algo or "SHA1").upper()
+    if algo_u == "SHA1":
+        digestmod = hashlib.sha1
+    elif algo_u == "SHA256":
+        digestmod = hashlib.sha256
+    elif algo_u == "SHA512":
+        digestmod = hashlib.sha512
+    else:
+        raise ValueError("Unsupported algorithm (use SHA1/SHA256/SHA512)")
+
+    msg = counter.to_bytes(8, "big")
+    h = hmac.new(key, msg, digestmod).digest()
+    off = h[-1] & 0x0F
+    dbc = int.from_bytes(h[off:off + 4], "big") & 0x7FFFFFFF
+    code = dbc % (10 ** digits)
+    return str(code).zfill(digits)
 
 
-def totp_now(account: OTPAuthAccount, *, now: int | None = None) -> Tuple[str, int]:
-    """
-    Returns (code, seconds_remaining).
-    """
-    if now is None:
-        now = int(time.time())
+def totp_at(acc: OTPAccount, for_time: int) -> str:
+    key = _b32_decode_nopad(acc.secret_b32)
+    period = int(acc.period)
+    counter = int(for_time) // period
+    return _hotp(key, counter, int(acc.digits), acc.algorithm)
 
-    period = int(account.period)
-    counter = now // period
+
+def totp_now(acc: OTPAccount) -> Tuple[str, int]:
+    now = int(time.time())
+    code = totp_at(acc, now)
+    # seconds remaining in current time step
+    period = int(acc.period)
     remaining = period - (now % period)
-
-    key = _b32decode(account.secret_b32)
-    msg = struct.pack(">Q", counter)
-    digestmod = _hash_for_alg(account.algorithm)
-
-    hm = hmac.new(key, msg, digestmod).digest()
-
-    # dynamic truncation
-    offset = hm[-1] & 0x0F
-    part = hm[offset:offset + 4]
-    dbc = struct.unpack(">I", part)[0] & 0x7FFFFFFF
-
-    code_int = dbc % (10 ** int(account.digits))
-    code = str(code_int).zfill(int(account.digits))
     return code, remaining
+
+
+def totp_verify(
+    acc: OTPAccount,
+    code: str,
+    *,
+    window: int = 1,
+    at_time: int | None = None,
+) -> Tuple[bool, int]:
+    """
+    Verify a TOTP code for an account.
+
+    window=1 checks +/- 1 step (e.g., 30s each side) for clock drift.
+    Returns (ok, matched_offset_steps).
+
+    matched_offset_steps:
+      0 means current step
+      -1 means previous step
+      +1 means next step
+    """
+    if at_time is None:
+        at_time = int(time.time())
+
+    code = (code or "").strip()
+    if not code.isdigit():
+        return False, 0
+
+    # Normalize window
+    if window < 0 or window > 10:
+        raise ValueError("window must be between 0 and 10")
+
+    period = int(acc.period)
+    base = int(at_time)
+
+    # constant-time compare to avoid timing leaks
+    for offset in range(-window, window + 1):
+        t = base + (offset * period)
+        expected = totp_at(acc, t)
+        if hmac.compare_digest(expected, code):
+            return True, offset
+
+    return False, 0
 
 ```
 
@@ -710,6 +874,17 @@ def _parse_otpauth_meta_best_effort(uri: str) -> Dict[str, Any]:
 ## `src/qrpypass/generate/__init__.py`
 
 ```python
+from .models import GenKind, GeneratedPayload
+from .payloads import generate_payload, generate_text, generate_url, generate_totp
+
+__all__ = [
+    "GenKind",
+    "GeneratedPayload",
+    "generate_payload",
+    "generate_text",
+    "generate_url",
+    "generate_totp",
+]
 
 ```
 
@@ -1115,31 +1290,49 @@ def decode_first(image_path: str) -> str:
 ```python
 from __future__ import annotations
 
+import io
 import os
 import tempfile
-import io 
-import qrcode
 from typing import Any, Dict
 
+import qrcode
 from flask import Flask, jsonify, request, render_template, send_file
 
 from qrpypass.qr import scan_and_classify
 
 from qrpypass.auth import (
-    parse_otpauth_uri, totp_now,
-    load_accounts, save_accounts,
-    StoreError, OTPAuthError
+    parse_otpauth_uri,
+    totp_now,
+    load_accounts,
+    save_accounts,
+    StoreError,
+    OTPAuthError,
+    topp_verify
 )
 
 from qrpypass.generate import generate_payload
 
 
 def create_app() -> Flask:
-    app = Flask(__name__)
+    # Ensure Flask can always locate templates/static in this package
+    here = os.path.dirname(__file__)
+    templates_dir = os.path.join(here, "templates")
+    static_dir = os.path.join(here, "static")
+
+    app = Flask(
+        __name__,
+        template_folder=templates_dir,
+        static_folder=static_dir,
+        static_url_path="/static",
+    )
 
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.get("/gen")
+    def gen_page():
+        return render_template("gen.html")
 
     @app.get("/health")
     def health():
@@ -1159,16 +1352,14 @@ def create_app() -> Flask:
         if not f.filename:
             return jsonify({"error": "empty filename"}), 400
 
-        # max_results (optional)
         max_results = request.form.get("max_results", "8")
         try:
             max_results_i = int(max_results)
-            if max_results_i < 1 or max_results_i > 50:
+            if not (1 <= max_results_i <= 50):
                 return jsonify({"error": "max_results must be between 1 and 50"}), 400
         except ValueError:
             return jsonify({"error": "max_results must be an integer"}), 400
 
-        # Save to a temp file so OpenCV can reliably read it
         suffix = os.path.splitext(f.filename)[1].lower() or ".img"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name
@@ -1176,12 +1367,8 @@ def create_app() -> Flask:
 
         try:
             hits = scan_and_classify(tmp_path, max_results=max_results_i)
-            return jsonify({
-                "count": len(hits),
-                "results": [h.to_dict() for h in hits],
-            })
+            return jsonify({"count": len(hits), "results": [h.to_dict() for h in hits]})
         except Exception as e:
-            # Keep error message for dev; later we can gate with DEBUG flag
             return jsonify({"error": str(e)}), 500
         finally:
             try:
@@ -1189,14 +1376,14 @@ def create_app() -> Flask:
             except Exception:
                 pass
 
-    return app
-
     @app.get("/auth/list")
     def auth_list():
         passphrase = request.args.get("passphrase")  # optional
         try:
             accounts = load_accounts(passphrase=passphrase)
-            return jsonify({"count": len(accounts), "accounts": [a.safe_dict() for a in accounts.values()]})
+            return jsonify(
+                {"count": len(accounts), "accounts": [a.safe_dict() for a in accounts.values()]}
+            )
         except StoreError as e:
             return jsonify({"error": str(e)}), 400
 
@@ -1220,11 +1407,7 @@ def create_app() -> Flask:
 
         try:
             accounts = load_accounts(passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
-        accounts[acc.id] = acc
-        try:
+            accounts[acc.id] = acc
             save_accounts(accounts, passphrase=passphrase)
         except StoreError as e:
             return jsonify({"error": str(e)}), 400
@@ -1253,23 +1436,56 @@ def create_app() -> Flask:
             return jsonify({"error": "Unknown id"}), 404
 
         code, remaining = totp_now(acc)
-        return jsonify({
-            "account": acc.safe_dict(),
-            "code": code,
-            "seconds_remaining": remaining,
-        })
+        return jsonify({"account": acc.safe_dict(), "code": code, "seconds_remaining": remaining})
+
+    @app.post("/auth/verify")
+    def auth_verify():
+        """
+        JSON:
+          { "id": "<account_id>", "code": "123456", "window": 1, "passphrase": "optional" }
+
+        Returns:
+          { ok: bool, matched_offset: int, account: {...} }
+        """
+        data = request.get_json(silent=True) or {}
+        acc_id = (data.get("id") or "").strip()
+        code = (data.get("code") or "").strip()
+        window = int(data.get("window", 1))
+        passphrase = data.get("passphrase")
+
+        if not acc_id:
+            return jsonify({"error": "Missing id"}), 400
+        if not code:
+            return jsonify({"error": "Missing code"}), 400
+
+        try:
+            accounts = load_accounts(passphrase=passphrase)
+        except StoreError as e:
+            return jsonify({"error": str(e)}), 400
+
+        acc = accounts.get(acc_id)
+        if not acc:
+            return jsonify({"error": "Unknown id"}), 404
+
+        try:
+            ok, offset = totp_verify(acc, code, window=window)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
+        return jsonify({"ok": ok, "matched_offset": offset, "account": acc.safe_dict()})
+
 
     @app.post("/gen/payload")
     def gen_payload():
         """
         JSON:
           { "kind": "url|text|totp", "params": {...}, "import": false, "passphrase": "optional" }
+
         For totp: if import=true, store into authenticator store.
         """
         data = request.get_json(silent=True) or {}
-        kind = data.get("kind", "")
+        kind = (data.get("kind") or "").strip()
         params = data.get("params", {}) or {}
-
         do_import = bool(data.get("import", False))
         passphrase = data.get("passphrase")
 
@@ -1280,7 +1496,6 @@ def create_app() -> Flask:
 
         imported = None
         if do_import and gp.kind.value == "otpauth_totp":
-            # reuse existing importer
             try:
                 acc = parse_otpauth_uri(gp.payload)
                 accounts = load_accounts(passphrase=passphrase)
@@ -1303,27 +1518,28 @@ def create_app() -> Flask:
         if not payload:
             return jsonify({"error": "payload is required"}), 400
 
-        box_size = int(data.get("box_size", 8))
-        border = int(data.get("border", 2))
-        if box_size < 2 or box_size > 20:
+        try:
+            box_size = int(data.get("box_size", 8))
+            border = int(data.get("border", 2))
+        except ValueError:
+            return jsonify({"error": "box_size and border must be integers"}), 400
+
+        if not (2 <= box_size <= 20):
             return jsonify({"error": "box_size must be between 2 and 20"}), 400
-        if border < 0 or border > 10:
+        if not (0 <= border <= 10):
             return jsonify({"error": "border must be between 0 and 10"}), 400
 
         qr = qrcode.QRCode(box_size=box_size, border=border)
         qr.add_data(payload)
         qr.make(fit=True)
-        img = qr.make_image()
 
+        img = qr.make_image()  # PIL image via qrcode[pil]
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
         return send_file(buf, mimetype="image/png")
 
-    @app.get("/gen")
-    def gen_page():
-        return render_template("gen.html")
-
+    return app
 
 ```
 
@@ -1698,16 +1914,388 @@ textarea {
 
 ```
 
+## `test/api-test.py`
+
+```python
+#!/usr/bin/env python3
+"""
+End-to-end API test for qr-pypass.
+
+Tests:
+  - /gen/payload (url, text, totp)
+  - /gen/qr (render payload -> PNG)
+  - /scan (decode PNG -> payload + classification)
+  - /auth/import, /auth/list, /auth/code (TOTP store + code generation)
+
+No third-party deps required (uses urllib).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, Tuple
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode, quote
+
+
+# ----------------------------
+# HTTP helpers (urllib only)
+# ----------------------------
+
+def http_json(method: str, url: str, payload: Dict[str, Any] | None = None, timeout: int = 20) -> Tuple[int, Dict[str, Any]]:
+    data = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = Request(url, data=data, headers=headers, method=method.upper())
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            status = resp.status
+    except Exception as e:
+        raise RuntimeError(f"HTTP error calling {method} {url}: {e}") from e
+
+    try:
+        return status, json.loads(raw.decode("utf-8", "ignore") or "{}")
+    except Exception:
+        return status, {"_raw": raw.decode("utf-8", "ignore")}
+
+
+def http_get_bytes(url: str, timeout: int = 20) -> bytes:
+    req = Request(url, headers={"Accept": "*/*"}, method="GET")
+    with urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+def http_post_bytes(url: str, body: bytes, content_type: str, timeout: int = 20) -> Tuple[int, bytes, Dict[str, str]]:
+    req = Request(url, data=body, headers={"Content-Type": content_type}, method="POST")
+    with urlopen(req, timeout=timeout) as resp:
+        return resp.status, resp.read(), dict(resp.headers.items())
+
+
+def multipart_form(fields: Dict[str, str], files: Dict[str, Tuple[str, bytes, str]]) -> Tuple[bytes, str]:
+    """
+    Build multipart/form-data body.
+
+    fields: {"max_results": "8"}
+    files: {"file": ("name.png", b"...", "image/png")}
+    """
+    boundary = "----qrpypass-" + uuid.uuid4().hex
+    crlf = b"\r\n"
+    parts = []
+
+    for k, v in fields.items():
+        parts.append(b"--" + boundary.encode("ascii"))
+        parts.append(f'Content-Disposition: form-data; name="{k}"'.encode("utf-8"))
+        parts.append(b"")
+        parts.append(v.encode("utf-8"))
+
+    for field_name, (filename, content, mime) in files.items():
+        parts.append(b"--" + boundary.encode("ascii"))
+        parts.append(
+            f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"'.encode("utf-8")
+        )
+        parts.append(f"Content-Type: {mime}".encode("utf-8"))
+        parts.append(b"")
+        parts.append(content)
+
+    parts.append(b"--" + boundary.encode("ascii") + b"--")
+    parts.append(b"")
+
+    body = crlf.join(parts)
+    content_type = f"multipart/form-data; boundary={boundary}"
+    return body, content_type
+
+
+# ----------------------------
+# Test logic
+# ----------------------------
+
+@dataclass
+class Generated:
+    kind: str
+    payload: str
+    meta: Dict[str, Any]
+
+
+def assert_ok(status: int, data: Dict[str, Any], ctx: str) -> None:
+    if not (200 <= status < 300):
+        raise RuntimeError(f"{ctx} failed: HTTP {status} :: {data}")
+
+
+def gen_payload(base: str, kind: str, params: Dict[str, Any], do_import: bool = False, passphrase: str | None = None) -> Tuple[Generated, Dict[str, Any] | None]:
+    status, data = http_json(
+        "POST",
+        f"{base}/gen/payload",
+        {"kind": kind, "params": params, "import": do_import, "passphrase": passphrase},
+    )
+    assert_ok(status, data, f"/gen/payload ({kind})")
+    g = data.get("generated") or {}
+    gp = Generated(kind=g.get("kind", ""), payload=g.get("payload", ""), meta=g.get("meta") or {})
+    imported = data.get("imported")
+    return gp, imported
+
+
+def gen_qr_png(base: str, payload: str, box_size: int = 8, border: int = 2) -> bytes:
+    status, raw, headers = http_post_bytes(
+        f"{base}/gen/qr",
+        body=json.dumps({"payload": payload, "box_size": box_size, "border": border}).encode("utf-8"),
+        content_type="application/json",
+    )
+    if status < 200 or status >= 300:
+        try:
+            msg = raw.decode("utf-8", "ignore")
+        except Exception:
+            msg = str(raw[:200])
+        raise RuntimeError(f"/gen/qr failed: HTTP {status} :: {msg}")
+    ctype = headers.get("Content-Type", "")
+    if "image/png" not in ctype:
+        raise RuntimeError(f"/gen/qr expected image/png, got {ctype}")
+    return raw
+
+
+def scan_png(base: str, png_bytes: bytes, *, max_results: int = 8) -> Dict[str, Any]:
+    body, ctype = multipart_form(
+        fields={"max_results": str(max_results)},
+        files={"file": ("generated.png", png_bytes, "image/png")},
+    )
+    status, raw, _headers = http_post_bytes(f"{base}/scan", body=body, content_type=ctype)
+    try:
+        data = json.loads(raw.decode("utf-8", "ignore") or "{}")
+    except Exception:
+        data = {"_raw": raw.decode("utf-8", "ignore")}
+    assert_ok(status, data, "/scan")
+    return data
+
+
+def auth_import(base: str, otpauth_uri: str, passphrase: str | None = None) -> Dict[str, Any]:
+    status, data = http_json("POST", f"{base}/auth/import", {"otpauth_uri": otpauth_uri, "passphrase": passphrase})
+    assert_ok(status, data, "/auth/import")
+    return data
+
+
+def auth_list(base: str, passphrase: str | None = None) -> Dict[str, Any]:
+    qs = ""
+    if passphrase:
+        qs = "?" + urlencode({"passphrase": passphrase})
+    status, data = http_json("GET", f"{base}/auth/list{qs}", None)
+    assert_ok(status, data, "/auth/list")
+    return data
+
+
+def auth_code(base: str, acc_id: str, passphrase: str | None = None) -> Dict[str, Any]:
+    q = {"id": acc_id}
+    if passphrase:
+        q["passphrase"] = passphrase
+    url = f"{base}/auth/code?{urlencode(q)}"
+    status, data = http_json("GET", url, None)
+    assert_ok(status, data, "/auth/code")
+    return data
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", default="http://127.0.0.1:5000", help="Base URL, e.g. http://127.0.0.1:5000")
+    ap.add_argument("--outdir", default="api_test_out", help="Where to write generated PNGs")
+    ap.add_argument("--passphrase", default="", help="Optional store passphrase (encrypts store at rest)")
+    ap.add_argument("--import-on-generate", action="store_true", help="Use /gen/payload import=true for TOTP instead of /auth/import")
+    args = ap.parse_args()
+
+    base = args.base.rstrip("/")
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    passphrase = args.passphrase.strip() or None
+
+    # Health
+    status, health = http_json("GET", f"{base}/health", None)
+    assert_ok(status, health, "/health")
+    print("[OK] health:", health)
+
+    # ---------------- URL test ----------------
+    url_target = "https://github.com/ginkorea/qr-pypass"
+    gp_url, _ = gen_payload(base, "url", {"url": url_target})
+    print("[OK] generated URL payload")
+    png_url = gen_qr_png(base, gp_url.payload)
+    (outdir / "url.png").write_bytes(png_url)
+    scan_url = scan_png(base, png_url, max_results=5)
+    decoded_url = (scan_url.get("results") or [{}])[0].get("classification", {}).get("raw", "")
+    if decoded_url != gp_url.payload:
+        raise RuntimeError(f"URL mismatch:\n  generated={gp_url.payload}\n  decoded={decoded_url}")
+    print("[OK] url -> qr -> scan roundtrip")
+
+    # ---------------- TEXT test ----------------
+    text_target = f"hello from qr-pypass at {time.time()}"
+    gp_text, _ = gen_payload(base, "text", {"text": text_target})
+    print("[OK] generated TEXT payload")
+    png_text = gen_qr_png(base, gp_text.payload)
+    (outdir / "text.png").write_bytes(png_text)
+    scan_text = scan_png(base, png_text, max_results=5)
+    decoded_text = (scan_text.get("results") or [{}])[0].get("classification", {}).get("raw", "")
+    if decoded_text != gp_text.payload:
+        raise RuntimeError(f"TEXT mismatch:\n  generated={gp_text.payload}\n  decoded={decoded_text}")
+    print("[OK] text -> qr -> scan roundtrip")
+
+    # ---------------- TOTP test ----------------
+    issuer = "QRPYPASS"
+    account_name = f"test-{uuid.uuid4().hex[:8]}@local"
+    do_import = bool(args.import_on_generate)
+
+    gp_totp, imported = gen_payload(
+        base,
+        "totp",
+        {"issuer": issuer, "account_name": account_name, "digits": 6, "period": 30, "algorithm": "SHA1", "nbytes": 20},
+        do_import=do_import,
+        passphrase=passphrase,
+    )
+    print("[OK] generated TOTP otpauth payload")
+
+    png_totp = gen_qr_png(base, gp_totp.payload)
+    (outdir / "totp.png").write_bytes(png_totp)
+
+    scan_totp = scan_png(base, png_totp, max_results=5)
+    decoded_totp = (scan_totp.get("results") or [{}])[0].get("classification", {}).get("raw", "")
+    if decoded_totp != gp_totp.payload:
+        raise RuntimeError(f"TOTP URI mismatch:\n  generated={gp_totp.payload}\n  decoded={decoded_totp}")
+    print("[OK] totp -> qr -> scan roundtrip")
+
+    if not do_import:
+        # Import via auth endpoint
+        imp = auth_import(base, gp_totp.payload, passphrase=passphrase)
+        imported = imp.get("imported")
+        print("[OK] imported TOTP via /auth/import")
+    else:
+        print("[OK] imported TOTP via /gen/payload import=true")
+
+    if not imported or not imported.get("id"):
+        raise RuntimeError(f"Import did not return an account id: {imported}")
+
+    acc_id = imported["id"]
+
+    # List accounts
+    listing = auth_list(base, passphrase=passphrase)
+    ids = [a.get("id") for a in (listing.get("accounts") or [])]
+    if acc_id not in ids:
+        raise RuntimeError(f"Imported account id not found in /auth/list. id={acc_id} ids={ids}")
+    print("[OK] /auth/list contains imported account")
+
+    # Get TOTP code
+    code_resp = auth_code(base, acc_id, passphrase=passphrase)
+    code = code_resp.get("code")
+    rem = code_resp.get("seconds_remaining")
+    if not code or not str(code).isdigit():
+        raise RuntimeError(f"Bad TOTP code returned: {code_resp}")
+    print(f"[OK] /auth/code => {code} (seconds_remaining={rem})")
+
+    print("\nAll tests passed.")
+    print(f"Artifacts written to: {outdir.resolve()}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        print("\n[FAIL]", e, file=sys.stderr)
+        raise SystemExit(2)
+
+```
+
+## `test/test_totp_verify_flow.py`
+
+```python
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import sys
+from urllib.request import Request, urlopen
+
+BASE = "http://127.0.0.1:5000"
+
+def post_json(path: str, obj: dict) -> dict:
+    url = BASE + path
+    req = Request(url, data=json.dumps(obj).encode("utf-8"), headers={"Content-Type":"application/json"}, method="POST")
+    with urlopen(req, timeout=20) as r:
+        data = json.loads(r.read().decode("utf-8"))
+        if r.status >= 400:
+            raise RuntimeError(f"{path} -> HTTP {r.status}: {data}")
+        return data
+
+def get_json(path: str) -> dict:
+    url = BASE + path
+    req = Request(url, method="GET")
+    with urlopen(req, timeout=20) as r:
+        data = json.loads(r.read().decode("utf-8"))
+        if r.status >= 400:
+            raise RuntimeError(f"{path} -> HTTP {r.status}: {data}")
+        return data
+
+def main():
+    # 1) generate a totp otpauth URI (no import)
+    gen = post_json("/gen/payload", {
+        "kind": "totp",
+        "params": {"issuer":"QRPYPASS", "account_name":"verify-test@local", "digits":6, "period":30, "algorithm":"SHA1"},
+        "import": False
+    })
+    uri = gen["generated"]["payload"]
+    print("[gen] uri:", uri[:80] + "...")
+
+    # 2) import it
+    imp = post_json("/auth/import", {"otpauth_uri": uri})
+    acc_id = imp["imported"]["id"]
+    print("[import] id:", acc_id)
+
+    # 3) get current code
+    code_resp = get_json(f"/auth/code?id={acc_id}")
+    code = code_resp["code"]
+    print("[code] code:", code, "remaining:", code_resp["seconds_remaining"])
+
+    # 4) verify the code
+    ver = post_json("/auth/verify", {"id": acc_id, "code": code, "window": 1})
+    print("[verify] ok:", ver["ok"], "offset:", ver["matched_offset"])
+    if not ver["ok"]:
+        raise RuntimeError("Expected verify to succeed")
+
+    # 5) verify a bad code
+    bad = post_json("/auth/verify", {"id": acc_id, "code": "000000", "window": 1})
+    print("[verify-bad] ok:", bad["ok"])
+    if bad["ok"]:
+        raise RuntimeError("Expected verify to fail")
+
+    print("All good.")
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        print("FAIL:", e, file=sys.stderr)
+        raise
+
+```
+
 <details>
 <summary>📁 Final Project Structure</summary>
 
 ```
 📁 images/
     📄 qr.png
+    📄 test.png
 📁 src/
     📁 qrpypass/
         📁 auth/
             📄 __init__.py
+            📄 generate.py
             📄 models.py
             📄 otpauth.py
             📄 store.py
@@ -1742,6 +2330,13 @@ textarea {
         📄 PKG-INFO
         📄 SOURCES.txt
         📄 top_level.txt
+📁 test/
+    📁 api_test_out/
+        📄 text.png
+        📄 totp.png
+        📄 url.png
+    📄 api-test.py
+    📄 test_totp_verify_flow.py
 📄 gitignore
 📄 project.md
 📄 README.md

@@ -3,23 +3,22 @@ from __future__ import annotations
 import io
 import os
 import tempfile
-from typing import Any, Dict
 
 import qrcode
 from flask import Flask, jsonify, request, render_template, send_file
 
 from qrpypass.qr import scan_and_classify
+from qrpypass.generate import generate_payload
 
 from qrpypass.auth import (
     parse_otpauth_uri,
     totp_now,
+    totp_verify,
     load_accounts,
     save_accounts,
     StoreError,
     OTPAuthError,
 )
-
-from qrpypass.generate import generate_payload
 
 
 def create_app() -> Flask:
@@ -147,8 +146,48 @@ def create_app() -> Flask:
         code, remaining = totp_now(acc)
         return jsonify({"account": acc.safe_dict(), "code": code, "seconds_remaining": remaining})
 
+    @app.post("/auth/verify")
+    def auth_verify():
+        """
+        JSON:
+          { "id": "<account_id>", "code": "123456", "window": 1, "passphrase": "optional" }
+
+        Returns:
+          { ok: bool, matched_offset: int, account: {...} }
+        """
+        data = request.get_json(silent=True) or {}
+        acc_id = (data.get("id") or "").strip()
+        code = (data.get("code") or "").strip()
+        passphrase = data.get("passphrase")
+
+        try:
+            window = int(data.get("window", 1))
+        except Exception:
+            return jsonify({"error": "window must be an integer"}), 400
+
+        if not acc_id:
+            return jsonify({"error": "Missing id"}), 400
+        if not code:
+            return jsonify({"error": "Missing code"}), 400
+
+        try:
+            accounts = load_accounts(passphrase=passphrase)
+        except StoreError as e:
+            return jsonify({"error": str(e)}), 400
+
+        acc = accounts.get(acc_id)
+        if not acc:
+            return jsonify({"error": "Unknown id"}), 404
+
+        try:
+            ok, offset = totp_verify(acc, code, window=window)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
+        return jsonify({"ok": ok, "matched_offset": offset, "account": acc.safe_dict()})
+
     @app.post("/gen/payload")
-    def gen_payload():
+    def gen_payload_api():
         """
         JSON:
           { "kind": "url|text|totp", "params": {...}, "import": false, "passphrase": "optional" }
@@ -158,6 +197,7 @@ def create_app() -> Flask:
         data = request.get_json(silent=True) or {}
         kind = (data.get("kind") or "").strip()
         params = data.get("params", {}) or {}
+
         do_import = bool(data.get("import", False))
         passphrase = data.get("passphrase")
 
@@ -205,7 +245,7 @@ def create_app() -> Flask:
         qr.add_data(payload)
         qr.make(fit=True)
 
-        img = qr.make_image()  # PIL image via qrcode[pil]
+        img = qr.make_image()
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
