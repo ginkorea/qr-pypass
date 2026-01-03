@@ -4,64 +4,54 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass</title>
-
-  <!-- CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-  <!-- Header / Nav -->
-  <div class="row" style="justify-content: space-between; align-items: center;">
-    <h1>qr-pypass</h1>
-    <div class="row">
-      <a href="{{ url_for('vault') }}">Vault</a>
-      <a href="{{ url_for('gen_page') }}">Generate</a>
-      <a href="{{ url_for('logout') }}">Logout</a>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Scanner</div>
+      </div>
     </div>
-  </div>
 
-  <p class="muted">
-    Upload a screenshot or photo containing QR codes.
-    Authenticator (otpauth) QRs can be imported and will generate live codes.
-  </p>
+    <nav class="nav">
+      <a class="navlink active" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
 
-  <!-- Upload Card -->
-  <div class="card">
-    <form id="uploadForm" class="row">
-      <input
-        id="file"
-        type="file"
-        accept="image/*"
-        required
-      />
+  <main class="container">
+    <p class="muted">
+      Upload a screenshot or photo containing QR codes. Authenticator (otpauth) QRs can be imported and will generate live codes.
+    </p>
 
-      <label>
-        max_results
-        <input
-          id="maxResults"
-          type="number"
-          min="1"
-          max="50"
-          value="8"
-        />
-      </label>
+    <section class="card">
+      <form id="uploadForm" class="row">
+        <input id="file" type="file" accept="image/*" required />
 
-      <label class="row" style="gap:8px;">
-        <input id="autoImportOtp" type="checkbox" checked />
-        auto-import otpauth
-      </label>
+        <label>max_results
+          <input id="maxResults" type="number" min="1" max="50" value="8" />
+        </label>
 
-      <button type="submit">Scan</button>
-    </form>
+        <label class="row" style="gap:8px;">
+          <input id="autoImportOtp" type="checkbox" checked />
+          auto-import otpauth
+        </label>
 
-    <p id="status" class="muted"></p>
-  </div>
+        <button type="submit">Scan</button>
+      </form>
 
-  <!-- Results -->
-  <div id="results"></div>
+      <p id="status" class="muted"></p>
+    </section>
 
-  <!-- JS -->
+    <div id="results"></div>
+  </main>
+
   <script src="{{ url_for('static', filename='app.js') }}"></script>
-
 </body>
 </html>

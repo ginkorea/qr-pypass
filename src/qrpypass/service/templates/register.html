@@ -7,22 +7,60 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>Create account</h1>
 
-  <div class="card">
-    <form method="POST" class="row">
-      <input name="email" type="email" placeholder="email" required style="min-width:320px;" />
-      <input name="password" type="password" placeholder="password (>= 10 chars)" required style="min-width:280px;" />
-      <button type="submit">Register</button>
-    </form>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Create account</div>
+      </div>
+    </div>
 
-    <p class="muted" style="margin-top:10px;">
-      Already have an account? <a href="{{ url_for('login') }}">Login</a>
-    </p>
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('login') }}">Login</a>
+      <a class="navlink active" href="{{ url_for('register') }}">Register</a>
+    </nav>
+  </header>
 
-    {% if error %}
-      <p style="margin-top:10px;">❌ {{ error }}</p>
-    {% endif %}
-  </div>
+  <main class="container">
+    <section class="card">
+      <h1 style="margin-bottom:8px;">Register</h1>
+      <p class="muted" style="margin-top:0;">
+        Create an account. Use a strong password (10+ characters).
+      </p>
+
+      <form method="POST" class="row" style="margin-top:14px;">
+        <label>
+          email
+          <input name="email" type="email" placeholder="you@example.com" required style="min-width:320px;" />
+        </label>
+
+        <label>
+          password
+          <input name="password" type="password" placeholder="10+ characters" required style="min-width:260px;" />
+        </label>
+
+        <button type="submit">Create</button>
+      </form>
+
+      <div class="card subtle" style="margin-top:14px;">
+        <div><b>Password tips</b></div>
+        <div class="muted">Use a long passphrase. Avoid reusing a password from other sites.</div>
+      </div>
+
+      {% if error %}
+        <div class="card subtle" style="margin-top:14px; border-color: rgba(255,120,140,0.25);">
+          <div><b>Registration failed</b></div>
+          <div class="muted">{{ error }}</div>
+        </div>
+      {% endif %}
+
+      <p class="muted" style="margin-top:14px;">
+        Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+      </p>
+    </section>
+  </main>
+
 </body>
 </html>

@@ -7,32 +7,57 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>qr-pypass generator</h1>
-  <p class="muted">Generate payloads (URL/Text/TOTP) and render them as QR codes.</p>
 
-  <div class="card">
-    <div class="row">
-      <label>type
-        <select id="kind">
-          <option value="url">URL</option>
-          <option value="text">Text</option>
-          <option value="totp">TOTP (otpauth)</option>
-        </select>
-      </label>
-      <label class="row" style="gap:8px;">
-        <input id="doImport" type="checkbox" />
-        import (TOTP only)
-      </label>
-      <input id="passphrase" type="password" placeholder="passphrase (optional)" />
-      <button id="btnGen" type="button">Generate</button>
+  <!-- Header / Nav -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Generator</div>
+      </div>
     </div>
 
-    <div id="fields" style="margin-top:12px;"></div>
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink active" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
 
-    <p id="status" class="muted"></p>
-  </div>
+  <main class="container">
+    <p class="muted">
+      Generate payloads (URL/Text/TOTP) and render them as QR codes.
+    </p>
 
-  <div id="out"></div>
+    <section class="card">
+      <div class="row">
+        <label>type
+          <select id="kind">
+            <option value="url">URL</option>
+            <option value="text">Text</option>
+            <option value="totp">TOTP (otpauth)</option>
+          </select>
+        </label>
+
+        <label class="row" style="gap:8px;">
+          <input id="doImport" type="checkbox" />
+          import (TOTP only)
+        </label>
+
+        <!-- passphrase removed (multi-user server-side encryption) -->
+
+        <button id="btnGen" type="button">Generate</button>
+      </div>
+
+      <div id="fields" style="margin-top:12px;"></div>
+
+      <p id="status" class="muted"></p>
+    </section>
+
+    <div id="out"></div>
+  </main>
 
   <script src="{{ url_for('static', filename='gen.js') }}"></script>
 </body>
