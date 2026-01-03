@@ -5,6 +5,12 @@ Summary: Headless QR decoder + TOTP authenticator Flask mini-service
 Author: Josh Gompert
 Author-email: 
 Requires-Python: >=3.9
+Requires-Dist: opencv-python>=4.8.0
+Requires-Dist: cryptography>=41.0.0
+Requires-Dist: Flask>=3.0.0
+Requires-Dist: qrcode[pil]>=7.4.2
+Requires-Dist: Pillow>=10.0.0
 Dynamic: author
+Dynamic: requires-dist
 Dynamic: requires-python
 Dynamic: summary
