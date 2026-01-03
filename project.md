@@ -6,9 +6,9 @@
 |:--|:--|
 | Root Directory | `/home/gompert/data/workspace/qr-pypass` |
 | Total Directories | 13 |
-| Total Indexed Files | 35 |
+| Total Indexed Files | 36 |
 | Skipped Files | 5 |
-| Indexed Size | 58.86 KB |
+| Indexed Size | 60.89 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
@@ -47,6 +47,7 @@
 - [src/qrpypass/service/templates/gen.html](#src-qrpypass-service-templates-gen-html)
 - [src/qrpypass/service/templates/index.html](#src-qrpypass-service-templates-index-html)
 - [test/api-test.py](#test-api-test-py)
+- [test/full_api_smoke.py](#test-full-api-smoke-py)
 - [test/test_totp_verify_flow.py](#test-test-totp-verify-flow-py)
 
 ## 📂 Project Structure
@@ -100,6 +101,7 @@
         📄 totp.png
         📄 url.png
     📄 api-test.py
+    📄 full_api_smoke.py
     📄 test_totp_verify_flow.py
 📄 gitignore
 📄 project.md
@@ -260,7 +262,7 @@ __all__ = ["GenKind", "GeneratedPayload", "generate_payload", "generate_text", "
 ## `src/qrpypass/auth/__init__.py`
 
 ```python
-from .models import OTPAuthAccount
+from .models import OTPAuthAccount, OTPAccount
 from .otpauth import OTPAuthError, parse_otpauth_uri
 from .totp import totp_now, totp_verify
 from .store import load_accounts, save_accounts, default_store_path, StoreError
@@ -268,13 +270,17 @@ from .generate import generate_totp_secret_b32, build_otpauth_uri
 
 __all__ = [
     "OTPAuthAccount",
+    "OTPAccount",
     "OTPAuthError",
     "parse_otpauth_uri",
     "totp_now",
+    "totp_verify",
     "load_accounts",
     "save_accounts",
     "default_store_path",
     "StoreError",
+    "generate_totp_secret_b32",
+    "build_otpauth_uri",
 ]
 
 ```
@@ -384,6 +390,10 @@ class OTPAuthAccount:
             "digits": self.digits,
             "period": self.period,
         }
+
+
+# Backwards-compatible alias (your totp.py was importing OTPAccount)
+OTPAccount = OTPAuthAccount
 
 ```
 
@@ -637,12 +647,11 @@ import hashlib
 import time
 from typing import Tuple
 
-from .models import OTPAccount
+from .models import OTPAuthAccount  # canonical
 
 
 def _b32_decode_nopad(secret_b32: str) -> bytes:
     s = (secret_b32 or "").strip().replace(" ", "").upper()
-    # add padding if needed
     pad = (-len(s)) % 8
     s += "=" * pad
     try:
@@ -670,40 +679,28 @@ def _hotp(key: bytes, counter: int, digits: int, algo: str) -> str:
     return str(code).zfill(digits)
 
 
-def totp_at(acc: OTPAccount, for_time: int) -> str:
+def totp_at(acc: OTPAuthAccount, for_time: int) -> str:
     key = _b32_decode_nopad(acc.secret_b32)
     period = int(acc.period)
     counter = int(for_time) // period
     return _hotp(key, counter, int(acc.digits), acc.algorithm)
 
 
-def totp_now(acc: OTPAccount) -> Tuple[str, int]:
+def totp_now(acc: OTPAuthAccount) -> Tuple[str, int]:
     now = int(time.time())
     code = totp_at(acc, now)
-    # seconds remaining in current time step
     period = int(acc.period)
     remaining = period - (now % period)
     return code, remaining
 
 
 def totp_verify(
-    acc: OTPAccount,
+    acc: OTPAuthAccount,
     code: str,
     *,
     window: int = 1,
     at_time: int | None = None,
 ) -> Tuple[bool, int]:
-    """
-    Verify a TOTP code for an account.
-
-    window=1 checks +/- 1 step (e.g., 30s each side) for clock drift.
-    Returns (ok, matched_offset_steps).
-
-    matched_offset_steps:
-      0 means current step
-      -1 means previous step
-      +1 means next step
-    """
     if at_time is None:
         at_time = int(time.time())
 
@@ -711,14 +708,12 @@ def totp_verify(
     if not code.isdigit():
         return False, 0
 
-    # Normalize window
     if window < 0 or window > 10:
         raise ValueError("window must be between 0 and 10")
 
     period = int(acc.period)
     base = int(at_time)
 
-    # constant-time compare to avoid timing leaks
     for offset in range(-window, window + 1):
         t = base + (offset * period)
         expected = totp_at(acc, t)
@@ -1293,24 +1288,22 @@ from __future__ import annotations
 import io
 import os
 import tempfile
-from typing import Any, Dict
 
 import qrcode
 from flask import Flask, jsonify, request, render_template, send_file
 
 from qrpypass.qr import scan_and_classify
+from qrpypass.generate import generate_payload
 
 from qrpypass.auth import (
     parse_otpauth_uri,
     totp_now,
+    totp_verify,
     load_accounts,
     save_accounts,
     StoreError,
     OTPAuthError,
-    topp_verify
 )
-
-from qrpypass.generate import generate_payload
 
 
 def create_app() -> Flask:
@@ -1450,8 +1443,12 @@ def create_app() -> Flask:
         data = request.get_json(silent=True) or {}
         acc_id = (data.get("id") or "").strip()
         code = (data.get("code") or "").strip()
-        window = int(data.get("window", 1))
         passphrase = data.get("passphrase")
+
+        try:
+            window = int(data.get("window", 1))
+        except Exception:
+            return jsonify({"error": "window must be an integer"}), 400
 
         if not acc_id:
             return jsonify({"error": "Missing id"}), 400
@@ -1474,9 +1471,8 @@ def create_app() -> Flask:
 
         return jsonify({"ok": ok, "matched_offset": offset, "account": acc.safe_dict()})
 
-
     @app.post("/gen/payload")
-    def gen_payload():
+    def gen_payload_api():
         """
         JSON:
           { "kind": "url|text|totp", "params": {...}, "import": false, "passphrase": "optional" }
@@ -1486,6 +1482,7 @@ def create_app() -> Flask:
         data = request.get_json(silent=True) or {}
         kind = (data.get("kind") or "").strip()
         params = data.get("params", {}) or {}
+
         do_import = bool(data.get("import", False))
         passphrase = data.get("passphrase")
 
@@ -1533,7 +1530,7 @@ def create_app() -> Flask:
         qr.add_data(payload)
         qr.make(fit=True)
 
-        img = qr.make_image()  # PIL image via qrcode[pil]
+        img = qr.make_image()
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
@@ -2211,6 +2208,85 @@ if __name__ == "__main__":
 
 ```
 
+## `test/full_api_smoke.py`
+
+```python
+from __future__ import annotations
+
+import json
+import os
+import time
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+
+BASE = os.environ.get("QRPYPASS_BASE", "http://127.0.0.1:5000")
+
+
+def post_json(path: str, obj: dict) -> dict:
+    data = json.dumps(obj).encode("utf-8")
+    req = Request(BASE + path, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    with urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def get_json(path: str, params: dict | None = None) -> dict:
+    url = BASE + path
+    if params:
+        url += "?" + urlencode(params)
+    req = Request(url, method="GET")
+    with urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def main():
+    print("[health]", get_json("/health"))
+
+    # 1) generate a TOTP provisioning URI + import it
+    gen = post_json("/gen/payload", {
+        "kind": "totp",
+        "params": {
+            "issuer": "QRPYPASS",
+            "account_name": "verify-test@local",
+            "digits": 6,
+            "period": 30,
+            "algorithm": "SHA1",
+            "nbytes": 20
+        },
+        "import": True,
+        "passphrase": None
+    })
+    print("[gen] kind:", gen["generated"]["kind"])
+    print("[gen] uri (prefix):", gen["generated"]["payload"][:60] + "...")
+    acc = gen.get("imported") or {}
+    acc_id = acc.get("id")
+    print("[import] id:", acc_id)
+
+    # 2) list accounts
+    lst = get_json("/auth/list")
+    print("[list] count:", lst["count"])
+
+    # 3) fetch current code
+    code_resp = get_json("/auth/code", {"id": acc_id})
+    code = code_resp["code"]
+    remaining = code_resp["seconds_remaining"]
+    print("[code] code:", code, "remaining:", remaining)
+
+    # 4) verify the code
+    ver = post_json("/auth/verify", {"id": acc_id, "code": code, "window": 1})
+    print("[verify] ok:", ver["ok"], "matched_offset:", ver["matched_offset"])
+
+    # 5) negative test: wrong code
+    bad = post_json("/auth/verify", {"id": acc_id, "code": "000000", "window": 1})
+    print("[verify-bad] ok:", bad["ok"], "matched_offset:", bad["matched_offset"])
+
+    print("DONE")
+
+
+if __name__ == "__main__":
+    main()
+
+```
+
 ## `test/test_totp_verify_flow.py`
 
 ```python
@@ -2336,6 +2412,7 @@ if __name__ == "__main__":
         📄 totp.png
         📄 url.png
     📄 api-test.py
+    📄 full_api_smoke.py
     📄 test_totp_verify_flow.py
 📄 gitignore
 📄 project.md
