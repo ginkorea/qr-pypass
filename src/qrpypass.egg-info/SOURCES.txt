@@ -5,7 +5,6 @@ src/qrpypass/__init__.py
 src/qrpypass.egg-info/PKG-INFO
 src/qrpypass.egg-info/SOURCES.txt
 src/qrpypass.egg-info/dependency_links.txt
-src/qrpypass.egg-info/requires.txt
 src/qrpypass.egg-info/top_level.txt
 src/qrpypass/auth/__init__.py
 src/qrpypass/auth/generate.py

@@ -1,58 +1,94 @@
 # qr-pypass
 
-**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service.  
-It is designed for air-gapped labs, automation pipelines, and security tooling where you need to:
+**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service built for **offline-first security workflows**.
 
-- Decode QR codes from screenshots or images
-- Classify QR payloads (URL, text, otpauth)
-- Generate QR codes programmatically
-- Generate, import, store, and verify TOTP (RFC 6238) secrets
-- Run everything locally with no cloud dependencies
+It is designed for air-gapped labs, red-team and blue-team tooling, automation pipelines, and environments where QR codes and 2FA need to be processed **locally**, without mobile devices or cloud dependencies.
 
-The project exposes both a **Python API** and a **Flask-based HTTP service with a minimal web UI**.
+**Homepage:** [https://ginkorea.one](https://ginkorea.one)
+**Source:** [https://github.com/ginkorea/qr-pypass](https://github.com/ginkorea/qr-pypass)
+**PyPI:** [https://pypi.org/project/qrpypass/](https://pypi.org/project/qrpypass/)
 
 ---
 
-## Features
+## What It Does
+
+With `qr-pypass`, you can:
+
+* Decode QR codes from screenshots or images
+* Detect and classify QR payloads (URL, text, otpauth)
+* Generate QR codes programmatically
+* Generate, import, store, and verify TOTP (RFC 6238) secrets
+* Run everything locally with no outbound network access
+
+The project exposes both:
+
+* A **Python API** for direct integration
+* A **Flask-based HTTP service** with a minimal web UI
+
+---
+
+## Core Features
 
 ### QR Decoding
-- Detects **multiple QR codes anywhere in an image**
-- Uses OpenCV with multi-pass detection and tiling fallback
-- Returns bounding boxes, corners, and decode method
-- Robust against screenshots, partial QRs, and large images
+
+* Detects **multiple QR codes anywhere in an image**
+* Uses OpenCV with multi-pass detection and tiling fallback
+* Returns bounding boxes, corner points, and decode method
+* Robust against screenshots, partial QRs, and large images
 
 ### Payload Classification
-Automatically classifies decoded QR payloads as:
-- `url` (with normalization)
-- `text`
-- `otpauth` (TOTP provisioning URIs)
+
+Automatically classifies decoded payloads as:
+
+* `url` (with normalization)
+* `text`
+* `otpauth` (TOTP provisioning URIs)
 
 ### TOTP / OTPAuth
-- Generate RFC-compliant `otpauth://totp` URIs
-- Import existing provisioning URIs
-- Secure local storage (optional encryption at rest)
-- Generate current TOTP codes
-- Verify TOTP codes with configurable window
+
+* Generate RFC-compliant `otpauth://totp` URIs
+* Import existing provisioning URIs
+* Secure local storage (optional encryption at rest)
+* Generate current TOTP codes
+* Verify TOTP codes with configurable time window
 
 ### QR Generation
-- Generate QR codes for:
-  - URLs
-  - Arbitrary text
-  - TOTP provisioning URIs
-- Control box size and border
-- Returns PNG images
 
-### Service + UI
-- Flask API
-- Minimal web UI for:
-  - Uploading screenshots
-  - Viewing decoded QR payloads
-  - Generating QR codes
-  - Managing TOTP accounts
+* Generate QR codes for:
+
+  * URLs
+  * Arbitrary text
+  * TOTP provisioning URIs
+* Control box size and border
+* Outputs PNG images
+
+### Service and Web UI
+
+* Flask-based HTTP API
+* Minimal web UI for:
+
+  * Uploading screenshots or images
+  * Viewing decoded QR payloads
+  * Generating QR codes
+  * Managing stored TOTP accounts
+
+No JavaScript frameworks. No external assets.
 
 ---
 
 ## Installation
+
+### From PyPI
+
+```bash
+pip install qrpypass
+```
+
+Python **3.9+** is required.
+
+---
+
+### From Source (Development)
 
 ```bash
 git clone https://github.com/ginkorea/qr-pypass.git
@@ -63,9 +99,7 @@ source .qr-env/bin/activate
 
 pip install -r requirements.txt
 pip install -e .
-````
-
-Python **3.9+** is required.
+```
 
 ---
 
@@ -75,29 +109,32 @@ Python **3.9+** is required.
 python -m qrpypass.service.run
 ```
 
-By default the service runs on:
+By default, the service runs at:
 
 ```
 http://127.0.0.1:5000
 ```
 
-### Environment Variables
+---
 
-| Variable             | Default       | Description               |
-| -------------------- | ------------- | ------------------------- |
-| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address              |
-| `QRPYPASS_PORT`      | `5000`        | Port                      |
-| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug        |
-| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Account storage directory |
+## Configuration
+
+The service can be configured using environment variables:
+
+| Variable             | Default       | Description                     |
+| -------------------- | ------------- | ------------------------------- |
+| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address                    |
+| `QRPYPASS_PORT`      | `5000`        | Port                            |
+| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug mode         |
+| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Local account storage directory |
 
 ---
 
-## Web UI
+## Web UI Routes
 
-* `/` – QR scan UI (upload screenshots/images)
-* `/gen` – QR payload + TOTP generator
-
-No JavaScript frameworks, no external assets.
+* `/` – QR scan UI (upload screenshots or images)
+* `/gen` – QR payload and TOTP generator
+* `/vault` – Stored TOTP account management
 
 ---
 
@@ -108,6 +145,8 @@ No JavaScript frameworks, no external assets.
 ```http
 GET /health
 ```
+
+---
 
 ### Scan QR Codes
 
@@ -133,7 +172,7 @@ Content-Type: application/json
 ```json
 {
   "kind": "url | text | totp",
-  "params": { ... },
+  "params": { },
   "import": false,
   "passphrase": null
 }
@@ -169,7 +208,7 @@ Returns `image/png`.
 | `GET /auth/code`    | Get current TOTP code |
 | `POST /auth/verify` | Verify TOTP code      |
 
-Optional `passphrase` encrypts the store at rest.
+An optional `passphrase` encrypts the TOTP store at rest.
 
 ---
 
@@ -179,15 +218,15 @@ Optional `passphrase` encrypts the store at rest.
 from qrpypass.qr import scan_and_classify
 
 hits = scan_and_classify("screenshot.png")
-for h in hits:
-    print(h.classification.kind, h.qr.payload)
+for hit in hits:
+    print(hit.classification.kind, hit.qr.payload)
 ```
 
 ---
 
 ## Testing
 
-End-to-end API tests are included:
+End-to-end tests are included:
 
 ```bash
 python test/api-test.py
@@ -195,7 +234,7 @@ python test/full_api_smoke.py
 python test/test_totp_verify_flow.py
 ```
 
-These tests cover:
+These cover:
 
 * QR generation → scan → classification
 * TOTP generation, import, code generation, and verification
@@ -205,19 +244,19 @@ These tests cover:
 ## Security Notes
 
 * Secrets are never logged
-* TOTP store can be encrypted using a passphrase
+* TOTP storage can be encrypted at rest
 * No outbound network access
 * Suitable for air-gapped or lab environments
 
 ---
 
-## Use Cases
+## Common Use Cases
 
 * QR extraction from screenshots (2FA enrollment, phishing analysis)
 * Headless TOTP verification in security tooling
-* Red-team / blue-team labs
+* Red-team and blue-team labs
 * Offline QR decoding pipelines
-* Lightweight local alternative to mobile authenticator apps
+* Local alternatives to mobile authenticator apps
 
 ---
 
@@ -230,6 +269,5 @@ MIT
 ## Author
 
 **Josh Gompert**
-
----
+[https://ginkorea.one](https://ginkorea.one)
 

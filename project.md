@@ -5,16 +5,18 @@
 | Metric | Value |
 |:--|:--|
 | Root Directory | `/home/gompert/data/workspace/qr-pypass` |
-| Total Directories | 13 |
-| Total Indexed Files | 36 |
-| Skipped Files | 5 |
-| Indexed Size | 69.51 KB |
+| Total Directories | 14 |
+| Total Indexed Files | 42 |
+| Skipped Files | 6 |
+| Indexed Size | 110.55 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
 
 - [README.md](#readme-md)
+- [dist/qrpypass-0.1.1-py3-none-any.whl](#dist-qrpypass-0-1-1-py3-none-any-whl)
 - [gitignore](#gitignore)
+- [pyproject.toml](#pyproject-toml)
 - [requirements.txt](#requirements-txt)
 - [setup.py](#setup-py)
 - [src/qrpypass.egg-info/PKG-INFO](#src-qrpypass-egg-info-pkg-info)
@@ -40,12 +42,16 @@
 - [src/qrpypass/qr/pipeline.py](#src-qrpypass-qr-pipeline-py)
 - [src/qrpypass/qr/scan.py](#src-qrpypass-qr-scan-py)
 - [src/qrpypass/service/app.py](#src-qrpypass-service-app-py)
+- [src/qrpypass/service/db.py](#src-qrpypass-service-db-py)
 - [src/qrpypass/service/run.py](#src-qrpypass-service-run-py)
 - [src/qrpypass/service/static/app.js](#src-qrpypass-service-static-app-js)
 - [src/qrpypass/service/static/gen.js](#src-qrpypass-service-static-gen-js)
 - [src/qrpypass/service/static/style.css](#src-qrpypass-service-static-style-css)
 - [src/qrpypass/service/templates/gen.html](#src-qrpypass-service-templates-gen-html)
 - [src/qrpypass/service/templates/index.html](#src-qrpypass-service-templates-index-html)
+- [src/qrpypass/service/templates/login.html](#src-qrpypass-service-templates-login-html)
+- [src/qrpypass/service/templates/register.html](#src-qrpypass-service-templates-register-html)
+- [src/qrpypass/service/templates/vault.html](#src-qrpypass-service-templates-vault-html)
 - [test/api-test.py](#test-api-test-py)
 - [test/full_api_smoke.py](#test-full-api-smoke-py)
 - [test/test_totp_verify_flow.py](#test-test-totp-verify-flow-py)
@@ -53,6 +59,9 @@
 ## 📂 Project Structure
 
 ```
+📁 dist/
+    📄 qrpypass-0.1.1-py3-none-any.whl
+    📄 qrpypass-0.1.1.tar.gz
 📁 images/
     📄 qr.png
     📄 test.png
@@ -87,7 +96,11 @@
             📁 templates/
                 📄 gen.html
                 📄 index.html
+                📄 login.html
+                📄 register.html
+                📄 vault.html
             📄 app.py
+            📄 db.py
             📄 run.py
         📄 __init__.py
     📁 qrpypass.egg-info/
@@ -105,6 +118,7 @@
     📄 test_totp_verify_flow.py
 📄 gitignore
 📄 project.md
+📄 pyproject.toml
 📄 README.md
 📄 requirements.txt
 📄 setup.py
@@ -394,6 +408,27 @@ logs/
 
 ```
 
+## `pyproject.toml`
+
+```toml
+[project]
+name = "qrpypass"
+version = "0.1.1"
+description = "Headless QR decoder + TOTP authenticator Flask mini-service"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+authors = [
+  { name = "Josh Gompert" }
+]
+[project.urls]
+Homepage = "https://github.com/ginkorea/qr-pypass"
+Repository = "https://github.com/ginkorea/qr-pypass"
+
+
+```
+
 ## `requirements.txt`
 
 ```text
@@ -402,6 +437,10 @@ cryptography>=41.0.0
 Flask>=3.0.0
 qrcode[pil]>=7.4.2
 Pillow>=10.0.0
+Flask-Login>=0.6.3
+Flask-Limiter>=3.7.0
+
+
 
 ```
 
@@ -412,13 +451,19 @@ from setuptools import setup, find_packages
 
 setup(
     name="qrpypass",
-    version="0.1.0",
+    version="0.1.1",
     description="Headless QR decoder + TOTP authenticator Flask mini-service",
     author="Josh Gompert",
     author_email="",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    install_requires=[],
+    install_requires=[
+        "opencv-python>=4.8.0",
+        "cryptography>=41.0.0",
+        "Flask>=3.0.0",
+        "qrcode[pil]>=7.4.2",
+        "Pillow>=10.0.0",
+    ],
     python_requires=">=3.9",
 )
 
@@ -429,14 +474,252 @@ setup(
 ```text
 Metadata-Version: 2.4
 Name: qrpypass
-Version: 0.1.0
+Version: 0.1.1
 Summary: Headless QR decoder + TOTP authenticator Flask mini-service
 Author: Josh Gompert
 Author-email: 
+License: MIT
+Project-URL: Homepage, https://github.com/ginkorea/qr-pypass
+Project-URL: Repository, https://github.com/ginkorea/qr-pypass
 Requires-Python: >=3.9
-Dynamic: author
+Description-Content-Type: text/markdown
 Dynamic: requires-python
-Dynamic: summary
+
+# qr-pypass
+
+**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service.  
+It is designed for air-gapped labs, automation pipelines, and security tooling where you need to:
+
+- Decode QR codes from screenshots or images
+- Classify QR payloads (URL, text, otpauth)
+- Generate QR codes programmatically
+- Generate, import, store, and verify TOTP (RFC 6238) secrets
+- Run everything locally with no cloud dependencies
+
+The project exposes both a **Python API** and a **Flask-based HTTP service with a minimal web UI**.
+
+---
+
+## Features
+
+### QR Decoding
+- Detects **multiple QR codes anywhere in an image**
+- Uses OpenCV with multi-pass detection and tiling fallback
+- Returns bounding boxes, corners, and decode method
+- Robust against screenshots, partial QRs, and large images
+
+### Payload Classification
+Automatically classifies decoded QR payloads as:
+- `url` (with normalization)
+- `text`
+- `otpauth` (TOTP provisioning URIs)
+
+### TOTP / OTPAuth
+- Generate RFC-compliant `otpauth://totp` URIs
+- Import existing provisioning URIs
+- Secure local storage (optional encryption at rest)
+- Generate current TOTP codes
+- Verify TOTP codes with configurable window
+
+### QR Generation
+- Generate QR codes for:
+  - URLs
+  - Arbitrary text
+  - TOTP provisioning URIs
+- Control box size and border
+- Returns PNG images
+
+### Service + UI
+- Flask API
+- Minimal web UI for:
+  - Uploading screenshots
+  - Viewing decoded QR payloads
+  - Generating QR codes
+  - Managing TOTP accounts
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/ginkorea/qr-pypass.git
+cd qr-pypass
+
+python -m venv .qr-env
+source .qr-env/bin/activate
+
+pip install -r requirements.txt
+pip install -e .
+````
+
+Python **3.9+** is required.
+
+---
+
+## Running the Service
+
+```bash
+python -m qrpypass.service.run
+```
+
+By default the service runs on:
+
+```
+http://127.0.0.1:5000
+```
+
+### Environment Variables
+
+| Variable             | Default       | Description               |
+| -------------------- | ------------- | ------------------------- |
+| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address              |
+| `QRPYPASS_PORT`      | `5000`        | Port                      |
+| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug        |
+| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Account storage directory |
+
+---
+
+## Web UI
+
+* `/` – QR scan UI (upload screenshots/images)
+* `/gen` – QR payload + TOTP generator
+
+No JavaScript frameworks, no external assets.
+
+---
+
+## API Overview
+
+### Health Check
+
+```http
+GET /health
+```
+
+### Scan QR Codes
+
+```http
+POST /scan
+Content-Type: multipart/form-data
+```
+
+**Form fields**
+
+* `file` (required) – image file
+* `max_results` (optional, default: 8)
+
+---
+
+### Generate Payload
+
+```http
+POST /gen/payload
+Content-Type: application/json
+```
+
+```json
+{
+  "kind": "url | text | totp",
+  "params": { ... },
+  "import": false,
+  "passphrase": null
+}
+```
+
+---
+
+### Generate QR Image
+
+```http
+POST /gen/qr
+Content-Type: application/json
+```
+
+```json
+{
+  "payload": "...",
+  "box_size": 8,
+  "border": 2
+}
+```
+
+Returns `image/png`.
+
+---
+
+### TOTP Endpoints
+
+| Endpoint            | Description           |
+| ------------------- | --------------------- |
+| `POST /auth/import` | Import otpauth URI    |
+| `GET /auth/list`    | List stored accounts  |
+| `GET /auth/code`    | Get current TOTP code |
+| `POST /auth/verify` | Verify TOTP code      |
+
+Optional `passphrase` encrypts the store at rest.
+
+---
+
+## Python API Example
+
+```python
+from qrpypass.qr import scan_and_classify
+
+hits = scan_and_classify("screenshot.png")
+for h in hits:
+    print(h.classification.kind, h.qr.payload)
+```
+
+---
+
+## Testing
+
+End-to-end API tests are included:
+
+```bash
+python test/api-test.py
+python test/full_api_smoke.py
+python test/test_totp_verify_flow.py
+```
+
+These tests cover:
+
+* QR generation → scan → classification
+* TOTP generation, import, code generation, and verification
+
+---
+
+## Security Notes
+
+* Secrets are never logged
+* TOTP store can be encrypted using a passphrase
+* No outbound network access
+* Suitable for air-gapped or lab environments
+
+---
+
+## Use Cases
+
+* QR extraction from screenshots (2FA enrollment, phishing analysis)
+* Headless TOTP verification in security tooling
+* Red-team / blue-team labs
+* Offline QR decoding pipelines
+* Lightweight local alternative to mobile authenticator apps
+
+---
+
+## License
+
+MIT
+
+---
+
+## Author
+
+**Josh Gompert**
+
+---
+
 
 ```
 
@@ -444,6 +727,7 @@ Dynamic: summary
 
 ```text
 README.md
+pyproject.toml
 setup.py
 src/qrpypass/__init__.py
 src/qrpypass.egg-info/PKG-INFO
@@ -1525,7 +1809,11 @@ import os
 import tempfile
 
 import qrcode
-from flask import Flask, jsonify, request, render_template, send_file
+from flask import Flask, jsonify, request, render_template, send_file, redirect, url_for
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from PIL import Image
 
 from qrpypass.qr import scan_and_classify
 from qrpypass.generate import generate_payload
@@ -1534,15 +1822,13 @@ from qrpypass.auth import (
     parse_otpauth_uri,
     totp_now,
     totp_verify,
-    load_accounts,
-    save_accounts,
-    StoreError,
     OTPAuthError,
 )
 
+from .db import init_db, authenticate, create_user, get_user_by_id, upsert_totp_account, list_totp_accounts, get_totp_account
+
 
 def create_app() -> Flask:
-    # Ensure Flask can always locate templates/static in this package
     here = os.path.dirname(__file__)
     templates_dir = os.path.join(here, "templates")
     static_dir = os.path.join(here, "static")
@@ -1554,11 +1840,79 @@ def create_app() -> Flask:
         static_url_path="/static",
     )
 
+    # Required for sessions (set in env on PythonAnywhere / WSGI)
+    app.secret_key = os.environ.get("QRPYPASS_SECRET_KEY", "dev-unsafe-change-me")
+
+    # Upload size limit (e.g. 6 MB)
+    app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("QRPYPASS_MAX_UPLOAD_BYTES", str(6 * 1024 * 1024)))
+
+    # Rate limiting
+    limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
+
+    # DB init
+    init_db()
+
+    # Login setup
+    login_mgr = LoginManager()
+    login_mgr.login_view = "login"
+    login_mgr.init_app(app)
+
+    @login_mgr.user_loader
+    def load_user(user_id: str):
+        try:
+            return get_user_by_id(int(user_id))
+        except Exception:
+            return None
+
+    @app.get("/login")
+    def login():
+        return render_template("login.html")
+
+    @app.post("/login")
+    @limiter.limit("10 per minute")
+    def login_post():
+        email = (request.form.get("email") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        u = authenticate(email, password)
+        if not u:
+            return render_template("login.html", error="Invalid email/password"), 401
+        login_user(u)
+        return redirect(url_for("vault"))
+
+    @app.get("/register")
+    def register():
+        return render_template("register.html")
+
+    @app.post("/register")
+    @limiter.limit("5 per minute")
+    def register_post():
+        email = (request.form.get("email") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        try:
+            u = create_user(email, password)
+        except Exception as e:
+            return render_template("register.html", error=str(e)), 400
+        login_user(u)
+        return redirect(url_for("vault"))
+
+    @app.get("/logout")
+    @login_required
+    def logout():
+        logout_user()
+        return redirect(url_for("login"))
+
     @app.get("/")
+    @login_required
     def index():
         return render_template("index.html")
 
+    @app.get("/vault")
+    @login_required
+    def vault():
+        return render_template("vault.html")
+
     @app.get("/gen")
+    @login_required
     def gen_page():
         return render_template("gen.html")
 
@@ -1566,13 +1920,20 @@ def create_app() -> Flask:
     def health():
         return jsonify({"ok": True})
 
+    # ---------- helpers ----------
+    def _reject_huge_images(path: str) -> None:
+        # Prevent decompression bomb / giant images
+        with Image.open(path) as im:
+            w, h = im.size
+            max_dim = int(os.environ.get("QRPYPASS_MAX_IMAGE_DIM", "6000"))
+            if w > max_dim or h > max_dim:
+                raise ValueError(f"Image too large ({w}x{h}); max dimension is {max_dim}")
+
+    # ---------- SCAN ----------
     @app.post("/scan")
+    @login_required
+    @limiter.limit("30 per minute")
     def scan():
-        """
-        multipart/form-data:
-          file: (image) required
-          max_results: optional int
-        """
         if "file" not in request.files:
             return jsonify({"error": "missing form file field 'file'"}), 400
 
@@ -1594,37 +1955,31 @@ def create_app() -> Flask:
             f.save(tmp_path)
 
         try:
+            _reject_huge_images(tmp_path)
             hits = scan_and_classify(tmp_path, max_results=max_results_i)
             return jsonify({"count": len(hits), "results": [h.to_dict() for h in hits]})
         except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": str(e)}), 400
         finally:
             try:
                 os.remove(tmp_path)
             except Exception:
                 pass
 
+    # ---------- AUTH ----------
     @app.get("/auth/list")
+    @login_required
+    @limiter.limit("120 per minute")
     def auth_list():
-        passphrase = request.args.get("passphrase")  # optional
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-            return jsonify(
-                {"count": len(accounts), "accounts": [a.safe_dict() for a in accounts.values()]}
-            )
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
+        accounts = list_totp_accounts(current_user.id)
+        return jsonify({"count": len(accounts), "accounts": accounts})
 
     @app.post("/auth/import")
+    @login_required
+    @limiter.limit("20 per minute")
     def auth_import():
-        """
-        JSON:
-          { "otpauth_uri": "...", "passphrase": "optional" }
-        """
         data = request.get_json(silent=True) or {}
         uri = (data.get("otpauth_uri") or "").strip()
-        passphrase = data.get("passphrase")
-
         if not uri:
             return jsonify({"error": "Missing otpauth_uri"}), 400
 
@@ -1633,52 +1988,51 @@ def create_app() -> Flask:
         except OTPAuthError as e:
             return jsonify({"error": str(e)}), 400
 
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-            accounts[acc.id] = acc
-            save_accounts(accounts, passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
+        upsert_totp_account(
+            user_id=current_user.id,
+            acc_id=acc.id,
+            name=acc.name,
+            issuer=acc.issuer,
+            secret_b32=acc.secret_b32,
+            algorithm=acc.algorithm,
+            digits=acc.digits,
+            period=acc.period,
+        )
         return jsonify({"imported": acc.safe_dict()})
 
     @app.get("/auth/code")
+    @login_required
+    @limiter.limit("240 per minute")
     def auth_code():
-        """
-        Query:
-          id=<account_id>&passphrase=optional
-        """
         acc_id = (request.args.get("id") or "").strip()
-        passphrase = request.args.get("passphrase")
-
         if not acc_id:
             return jsonify({"error": "Missing id"}), 400
 
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
-        acc = accounts.get(acc_id)
-        if not acc:
+        row = get_totp_account(current_user.id, acc_id)
+        if not row:
             return jsonify({"error": "Unknown id"}), 404
 
+        # Build a transient OTPAuthAccount for totp_now
+        from qrpypass.auth.models import OTPAuthAccount
+        acc = OTPAuthAccount(
+            id=row["id"],
+            name=row["name"],
+            issuer=row["issuer"],
+            secret_b32=row["secret_b32"],
+            algorithm=row["algorithm"],
+            digits=row["digits"],
+            period=row["period"],
+        )
         code, remaining = totp_now(acc)
         return jsonify({"account": acc.safe_dict(), "code": code, "seconds_remaining": remaining})
 
     @app.post("/auth/verify")
+    @login_required
+    @limiter.limit("60 per minute")
     def auth_verify():
-        """
-        JSON:
-          { "id": "<account_id>", "code": "123456", "window": 1, "passphrase": "optional" }
-
-        Returns:
-          { ok: bool, matched_offset: int, account: {...} }
-        """
         data = request.get_json(silent=True) or {}
         acc_id = (data.get("id") or "").strip()
         code = (data.get("code") or "").strip()
-        passphrase = data.get("passphrase")
 
         try:
             window = int(data.get("window", 1))
@@ -1690,14 +2044,20 @@ def create_app() -> Flask:
         if not code:
             return jsonify({"error": "Missing code"}), 400
 
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
-        acc = accounts.get(acc_id)
-        if not acc:
+        row = get_totp_account(current_user.id, acc_id)
+        if not row:
             return jsonify({"error": "Unknown id"}), 404
+
+        from qrpypass.auth.models import OTPAuthAccount
+        acc = OTPAuthAccount(
+            id=row["id"],
+            name=row["name"],
+            issuer=row["issuer"],
+            secret_b32=row["secret_b32"],
+            algorithm=row["algorithm"],
+            digits=row["digits"],
+            period=row["period"],
+        )
 
         try:
             ok, offset = totp_verify(acc, code, window=window)
@@ -1706,20 +2066,15 @@ def create_app() -> Flask:
 
         return jsonify({"ok": ok, "matched_offset": offset, "account": acc.safe_dict()})
 
+    # ---------- GENERATE ----------
     @app.post("/gen/payload")
+    @login_required
+    @limiter.limit("60 per minute")
     def gen_payload_api():
-        """
-        JSON:
-          { "kind": "url|text|totp", "params": {...}, "import": false, "passphrase": "optional" }
-
-        For totp: if import=true, store into authenticator store.
-        """
         data = request.get_json(silent=True) or {}
         kind = (data.get("kind") or "").strip()
         params = data.get("params", {}) or {}
-
         do_import = bool(data.get("import", False))
-        passphrase = data.get("passphrase")
 
         try:
             gp = generate_payload(kind, params)
@@ -1730,21 +2085,26 @@ def create_app() -> Flask:
         if do_import and gp.kind.value == "otpauth_totp":
             try:
                 acc = parse_otpauth_uri(gp.payload)
-                accounts = load_accounts(passphrase=passphrase)
-                accounts[acc.id] = acc
-                save_accounts(accounts, passphrase=passphrase)
+                upsert_totp_account(
+                    user_id=current_user.id,
+                    acc_id=acc.id,
+                    name=acc.name,
+                    issuer=acc.issuer,
+                    secret_b32=acc.secret_b32,
+                    algorithm=acc.algorithm,
+                    digits=acc.digits,
+                    period=acc.period,
+                )
                 imported = acc.safe_dict()
-            except (OTPAuthError, StoreError) as e:
+            except OTPAuthError as e:
                 return jsonify({"error": str(e)}), 400
 
         return jsonify({"generated": gp.to_dict(), "imported": imported})
 
     @app.post("/gen/qr")
+    @login_required
+    @limiter.limit("120 per minute")
     def gen_qr():
-        """
-        JSON: { "payload": "string", "box_size": 8, "border": 2 }
-        Returns: image/png
-        """
         data = request.get_json(silent=True) or {}
         payload = (data.get("payload") or "").strip()
         if not payload:
@@ -1772,6 +2132,221 @@ def create_app() -> Flask:
         return send_file(buf, mimetype="image/png")
 
     return app
+
+```
+
+## `src/qrpypass/service/db.py`
+
+```python
+from __future__ import annotations
+
+import os
+import sqlite3
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+from cryptography.fernet import Fernet
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
+def data_dir() -> Path:
+    base = Path(os.environ.get("QRPYPASS_DATA_DIR", Path.home() / ".qrpypass"))
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def db_path() -> Path:
+    return data_dir() / "app.db"
+
+
+def master_fernet() -> Fernet:
+    key = os.environ.get("QRPYPASS_MASTER_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Missing QRPYPASS_MASTER_KEY (required in multi-user mode)")
+    # QRPYPASS_MASTER_KEY must be a Fernet key (urlsafe base64 32 bytes).
+    return Fernet(key.encode("utf-8"))
+
+
+def connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(db_path()))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    with connect() as c:
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            pw_hash TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+        """)
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS totp_accounts (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            issuer TEXT,
+            secret_enc BLOB NOT NULL,
+            algorithm TEXT NOT NULL,
+            digits INTEGER NOT NULL,
+            period INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(user_id, id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """)
+
+
+@dataclass
+class User:
+    id: int
+    email: str
+
+    # Flask-Login interface
+    @property
+    def is_authenticated(self) -> bool:  # pragma: no cover
+        return True
+
+    @property
+    def is_active(self) -> bool:  # pragma: no cover
+        return True
+
+    @property
+    def is_anonymous(self) -> bool:  # pragma: no cover
+        return False
+
+    def get_id(self) -> str:  # pragma: no cover
+        return str(self.id)
+
+
+def create_user(email: str, password: str) -> User:
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        raise ValueError("Invalid email")
+    if not password or len(password) < 10:
+        raise ValueError("Password must be at least 10 characters")
+
+    pw_hash = generate_password_hash(password)
+    now = int(time.time())
+
+    with connect() as c:
+        try:
+            cur = c.execute(
+                "INSERT INTO users (email, pw_hash, created_at) VALUES (?, ?, ?)",
+                (email, pw_hash, now),
+            )
+        except sqlite3.IntegrityError:
+            raise ValueError("Email already registered")
+        uid = int(cur.lastrowid)
+    return User(id=uid, email=email)
+
+
+def get_user_by_email(email: str) -> Optional[sqlite3.Row]:
+    with connect() as c:
+        r = c.execute("SELECT * FROM users WHERE email = ?", (email.strip().lower(),)).fetchone()
+        return r
+
+
+def get_user_by_id(user_id: int) -> Optional[User]:
+    with connect() as c:
+        r = c.execute("SELECT id, email FROM users WHERE id = ?", (int(user_id),)).fetchone()
+        if not r:
+            return None
+        return User(id=int(r["id"]), email=str(r["email"]))
+
+
+def authenticate(email: str, password: str) -> Optional[User]:
+    r = get_user_by_email(email)
+    if not r:
+        return None
+    if not check_password_hash(r["pw_hash"], password):
+        return None
+    return User(id=int(r["id"]), email=str(r["email"]))
+
+
+def upsert_totp_account(
+    *,
+    user_id: int,
+    acc_id: str,
+    name: str,
+    issuer: Optional[str],
+    secret_b32: str,
+    algorithm: str,
+    digits: int,
+    period: int,
+) -> None:
+    f = master_fernet()
+    secret_enc = f.encrypt(secret_b32.encode("utf-8"))
+    now = int(time.time())
+
+    with connect() as c:
+        c.execute(
+            """
+            INSERT INTO totp_accounts
+              (id, user_id, name, issuer, secret_enc, algorithm, digits, period, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              user_id=excluded.user_id,
+              name=excluded.name,
+              issuer=excluded.issuer,
+              secret_enc=excluded.secret_enc,
+              algorithm=excluded.algorithm,
+              digits=excluded.digits,
+              period=excluded.period
+            """,
+            (acc_id, int(user_id), name, issuer, secret_enc, algorithm, int(digits), int(period), now),
+        )
+
+
+def list_totp_accounts(user_id: int) -> List[Dict[str, Any]]:
+    with connect() as c:
+        rows = c.execute(
+            "SELECT id, name, issuer, algorithm, digits, period, created_at FROM totp_accounts WHERE user_id = ? ORDER BY created_at DESC",
+            (int(user_id),),
+        ).fetchall()
+
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "issuer": r["issuer"],
+                "algorithm": r["algorithm"],
+                "digits": int(r["digits"]),
+                "period": int(r["period"]),
+                "created_at": int(r["created_at"]),
+            }
+        )
+    return out
+
+
+def get_totp_account(user_id: int, acc_id: str) -> Optional[Dict[str, Any]]:
+    with connect() as c:
+        r = c.execute(
+            "SELECT * FROM totp_accounts WHERE user_id = ? AND id = ?",
+            (int(user_id), acc_id),
+        ).fetchone()
+        if not r:
+            return None
+
+    f = master_fernet()
+    secret_b32 = f.decrypt(r["secret_enc"]).decode("utf-8")
+
+    return {
+        "id": r["id"],
+        "name": r["name"],
+        "issuer": r["issuer"],
+        "secret_b32": secret_b32,
+        "algorithm": r["algorithm"],
+        "digits": int(r["digits"]),
+        "period": int(r["period"]),
+    }
 
 ```
 
@@ -2156,60 +2731,220 @@ renderFields();
 ## `src/qrpypass/service/static/style.css`
 
 ```css
-/* Base darkmode theme */
-:root {
+/* Modern dark theme (no framework) */
+:root{
   color-scheme: dark;
+
+  --bg: #0b0f17;
+  --panel: rgba(255,255,255,0.06);
+  --panel-2: rgba(255,255,255,0.04);
+  --border: rgba(255,255,255,0.12);
+  --border-2: rgba(255,255,255,0.08);
+  --text: rgba(255,255,255,0.92);
+  --muted: rgba(255,255,255,0.62);
+  --accent: rgba(120, 180, 255, 0.95);
+  --danger: rgba(255, 120, 140, 0.95);
+
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 
-body {
-  font-family: system-ui, sans-serif;
-  margin: 24px;
+*{ box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body{
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background:
+    radial-gradient(1000px 700px at 10% 0%, rgba(120,180,255,0.18), transparent 55%),
+    radial-gradient(900px 600px at 90% 10%, rgba(255,120,140,0.10), transparent 55%),
+    var(--bg);
+  color: var(--text);
+}
+
+.container{
   max-width: 980px;
+  margin: 0 auto;
+  padding: 18px 20px 48px;
 }
 
-.card {
-  border: 1px solid CanvasText;
-  border-radius: 10px;
-  padding: 14px;
-  margin-top: 16px;
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(12px);
+  background: linear-gradient(to bottom, rgba(11,15,23,0.86), rgba(11,15,23,0.65));
+  border-bottom: 1px solid var(--border-2);
+  padding: 14px 20px;
 }
 
-.row {
+.topbar .brand{
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo{
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  background: linear-gradient(135deg, rgba(120,180,255,0.35), rgba(255,120,140,0.25));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.title{
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.subtitle{
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.nav{
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.navlink{
+  text-decoration: none;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.navlink:hover{
+  color: var(--text);
+  border-color: var(--border-2);
+  background: rgba(255,255,255,0.03);
+}
+
+.navlink.active{
+  color: var(--text);
+  border-color: var(--border);
+  background: rgba(255,255,255,0.05);
+}
+
+.navlink.danger{
+  color: rgba(255,255,255,0.86);
+}
+.navlink.danger:hover{
+  border-color: rgba(255,120,140,0.35);
+  background: rgba(255,120,140,0.12);
+}
+
+h1{
+  margin: 0;
+  font-size: 18px;
+}
+
+.row{
+  display:flex;
+  gap: 14px;
   flex-wrap: wrap;
   align-items: center;
 }
 
-.muted {
-  opacity: 0.65;
+.card{
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  margin-top: 16px;
 }
 
-pre {
+.card.subtle{
+  background: var(--panel-2);
+  box-shadow: none;
+}
+
+.muted{ color: var(--muted); }
+
+pre{
   white-space: pre-wrap;
   word-break: break-word;
   padding: 12px;
-  border-radius: 8px;
-  border: 1px solid CanvasText;
-  font-family: ui-monospace, monospace;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(0,0,0,0.18);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  margin: 10px 0 0;
 }
 
-button {
+label{
+  display:flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+
+select,
+input[type="number"],
+input[type="password"],
+input[type="email"],
+input[type="file"],
+input[type="text"],
+textarea{
+  font-family: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(0,0,0,0.20);
+  color: var(--text);
+  outline: none;
+}
+
+select:focus,
+input:focus,
+textarea:focus{
+  border-color: rgba(120,180,255,0.45);
+  box-shadow: 0 0 0 4px rgba(120,180,255,0.10);
+}
+
+button{
   padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid CanvasText;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
   font-family: inherit;
   cursor: pointer;
 }
 
-input[type="number"],
-input[type="password"],
-input[type="file"],
-textarea {
-  font-family: inherit;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid CanvasText;
+button:hover{
+  background: rgba(255,255,255,0.10);
+}
+
+button:active{
+  transform: translateY(1px);
+}
+
+a{ color: var(--accent); }
+
+.otp{
+  font-size: 26px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 1.5px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(0,0,0,0.18);
+  min-width: 120px;
+  text-align: center;
 }
 
 ```
@@ -2226,32 +2961,57 @@ textarea {
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>qr-pypass generator</h1>
-  <p class="muted">Generate payloads (URL/Text/TOTP) and render them as QR codes.</p>
 
-  <div class="card">
-    <div class="row">
-      <label>type
-        <select id="kind">
-          <option value="url">URL</option>
-          <option value="text">Text</option>
-          <option value="totp">TOTP (otpauth)</option>
-        </select>
-      </label>
-      <label class="row" style="gap:8px;">
-        <input id="doImport" type="checkbox" />
-        import (TOTP only)
-      </label>
-      <input id="passphrase" type="password" placeholder="passphrase (optional)" />
-      <button id="btnGen" type="button">Generate</button>
+  <!-- Header / Nav -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Generator</div>
+      </div>
     </div>
 
-    <div id="fields" style="margin-top:12px;"></div>
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink active" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
 
-    <p id="status" class="muted"></p>
-  </div>
+  <main class="container">
+    <p class="muted">
+      Generate payloads (URL/Text/TOTP) and render them as QR codes.
+    </p>
 
-  <div id="out"></div>
+    <section class="card">
+      <div class="row">
+        <label>type
+          <select id="kind">
+            <option value="url">URL</option>
+            <option value="text">Text</option>
+            <option value="totp">TOTP (otpauth)</option>
+          </select>
+        </label>
+
+        <label class="row" style="gap:8px;">
+          <input id="doImport" type="checkbox" />
+          import (TOTP only)
+        </label>
+
+        <!-- passphrase removed (multi-user server-side encryption) -->
+
+        <button id="btnGen" type="button">Generate</button>
+      </div>
+
+      <div id="fields" style="margin-top:12px;"></div>
+
+      <p id="status" class="muted"></p>
+    </section>
+
+    <div id="out"></div>
+  </main>
 
   <script src="{{ url_for('static', filename='gen.js') }}"></script>
 </body>
@@ -2271,35 +3031,300 @@ textarea {
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>qr-pypass</h1>
-  <p class="muted">
-    Upload a screenshot (PNG/JPG). The server will find and decode QR codes, then classify the payload.
-  </p>
 
-  <div class="card">
-    <form id="uploadForm" class="row">
-      <input id="file" type="file" accept="image/*" required />
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Scanner</div>
+      </div>
+    </div>
 
-      <label>max_results
-        <input id="maxResults" type="number" min="1" max="50" value="8" />
-      </label>
+    <nav class="nav">
+      <a class="navlink active" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
 
-      <label class="row" style="gap:8px;">
-        <input id="autoImportOtp" type="checkbox" checked />
-        auto-import otpauth
-      </label>
+  <main class="container">
+    <p class="muted">
+      Upload a screenshot or photo containing QR codes. Authenticator (otpauth) QRs can be imported and will generate live codes.
+    </p>
 
-      <input id="passphrase" type="password" placeholder="store passphrase (optional)" />
+    <section class="card">
+      <form id="uploadForm" class="row">
+        <input id="file" type="file" accept="image/*" required />
 
-      <button type="submit">Scan</button>
-    </form>
+        <label>max_results
+          <input id="maxResults" type="number" min="1" max="50" value="8" />
+        </label>
 
-    <p id="status" class="muted"></p>
-  </div>
+        <label class="row" style="gap:8px;">
+          <input id="autoImportOtp" type="checkbox" checked />
+          auto-import otpauth
+        </label>
 
-  <div id="results"></div>
+        <button type="submit">Scan</button>
+      </form>
+
+      <p id="status" class="muted"></p>
+    </section>
+
+    <div id="results"></div>
+  </main>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
+
+```
+
+## `src/qrpypass/service/templates/login.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Sign in</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink active" href="{{ url_for('login') }}">Login</a>
+      <a class="navlink" href="{{ url_for('register') }}">Register</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h1 style="margin-bottom:8px;">Login</h1>
+      <p class="muted" style="margin-top:0;">
+        Sign in to scan, import authenticators, and view your vault.
+      </p>
+
+      <form method="POST" class="row" style="margin-top:14px;">
+        <label>
+          email
+          <input name="email" type="email" placeholder="you@example.com" required style="min-width:320px;" />
+        </label>
+
+        <label>
+          password
+          <input name="password" type="password" placeholder="••••••••••" required style="min-width:260px;" />
+        </label>
+
+        <button type="submit">Sign in</button>
+      </form>
+
+      {% if error %}
+        <div class="card subtle" style="margin-top:14px; border-color: rgba(255,120,140,0.25);">
+          <div><b>Login failed</b></div>
+          <div class="muted">{{ error }}</div>
+        </div>
+      {% endif %}
+
+      <p class="muted" style="margin-top:14px;">
+        New here? <a href="{{ url_for('register') }}">Create an account</a>
+      </p>
+    </section>
+  </main>
+
+</body>
+</html>
+
+```
+
+## `src/qrpypass/service/templates/register.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass register</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Create account</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('login') }}">Login</a>
+      <a class="navlink active" href="{{ url_for('register') }}">Register</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h1 style="margin-bottom:8px;">Register</h1>
+      <p class="muted" style="margin-top:0;">
+        Create an account. Use a strong password (10+ characters).
+      </p>
+
+      <form method="POST" class="row" style="margin-top:14px;">
+        <label>
+          email
+          <input name="email" type="email" placeholder="you@example.com" required style="min-width:320px;" />
+        </label>
+
+        <label>
+          password
+          <input name="password" type="password" placeholder="10+ characters" required style="min-width:260px;" />
+        </label>
+
+        <button type="submit">Create</button>
+      </form>
+
+      <div class="card subtle" style="margin-top:14px;">
+        <div><b>Password tips</b></div>
+        <div class="muted">Use a long passphrase. Avoid reusing a password from other sites.</div>
+      </div>
+
+      {% if error %}
+        <div class="card subtle" style="margin-top:14px; border-color: rgba(255,120,140,0.25);">
+          <div><b>Registration failed</b></div>
+          <div class="muted">{{ error }}</div>
+        </div>
+      {% endif %}
+
+      <p class="muted" style="margin-top:14px;">
+        Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+      </p>
+    </section>
+  </main>
+
+</body>
+</html>
+
+```
+
+## `src/qrpypass/service/templates/vault.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass vault</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Vault</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink active" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <p class="muted">Your stored authenticators. Click to show live code.</p>
+
+    <section class="card">
+      <div id="vault"></div>
+      <p id="status" class="muted"></p>
+    </section>
+  </main>
+
+  <script>
+    async function getJson(url){
+      const r = await fetch(url, {method:"GET"});
+      const d = await r.json().catch(() => ({}));
+      return {ok:r.ok, status:r.status, data:d};
+    }
+
+    const vaultEl = document.getElementById("vault");
+    const statusEl = document.getElementById("status");
+    const intervals = new Set();
+
+    function stopAll(){ for (const i of intervals) clearInterval(i); intervals.clear(); }
+    function esc(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+    async function refreshOne(id){
+      const res = await getJson(`/auth/code?id=${encodeURIComponent(id)}`);
+      if (!res.ok) return null;
+      return res.data;
+    }
+
+    async function load(){
+      stopAll();
+      statusEl.textContent = "Loading...";
+      const res = await getJson("/auth/list");
+      if (!res.ok){
+        statusEl.textContent = "Error loading vault.";
+        return;
+      }
+      const accts = res.data.accounts || [];
+      statusEl.textContent = `Accounts: ${accts.length}`;
+
+      vaultEl.innerHTML = accts.map(a => `
+        <div class="card subtle">
+          <div><b>${esc(a.issuer || "")}</b> ${esc(a.name || "")}</div>
+          <div class="muted">id: ${esc(a.id)}</div>
+          <div style="margin-top:10px;" class="row">
+            <button type="button" data-id="${esc(a.id)}">Show code</button>
+            <div class="otp" id="code-${esc(a.id)}">—</div>
+            <div class="muted" id="rem-${esc(a.id)}"></div>
+          </div>
+        </div>
+      `).join("");
+
+      vaultEl.querySelectorAll("button[data-id]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-id");
+          const codeEl = document.getElementById(`code-${id}`);
+          const remEl  = document.getElementById(`rem-${id}`);
+
+          async function tick(){
+            const d = await refreshOne(id);
+            if (!d) return;
+            codeEl.textContent = d.code || "—";
+            remEl.textContent = (typeof d.seconds_remaining === "number") ? `refresh in ${d.seconds_remaining}s` : "";
+          }
+
+          await tick();
+          const intv = setInterval(tick, 1000);
+          intervals.add(intv);
+        });
+      });
+    }
+
+    load();
+  </script>
 </body>
 </html>
 
@@ -2758,6 +3783,9 @@ if __name__ == "__main__":
 <summary>📁 Final Project Structure</summary>
 
 ```
+📁 dist/
+    📄 qrpypass-0.1.1-py3-none-any.whl
+    📄 qrpypass-0.1.1.tar.gz
 📁 images/
     📄 qr.png
     📄 test.png
@@ -2792,7 +3820,11 @@ if __name__ == "__main__":
             📁 templates/
                 📄 gen.html
                 📄 index.html
+                📄 login.html
+                📄 register.html
+                📄 vault.html
             📄 app.py
+            📄 db.py
             📄 run.py
         📄 __init__.py
     📁 qrpypass.egg-info/
@@ -2810,6 +3842,7 @@ if __name__ == "__main__":
     📄 test_totp_verify_flow.py
 📄 gitignore
 📄 project.md
+📄 pyproject.toml
 📄 README.md
 📄 requirements.txt
 📄 setup.py

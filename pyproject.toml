@@ -1,6 +1,6 @@
 [project]
 name = "qrpypass"
-version = "0.1.1"
+version = "0.1.2"
 description = "Headless QR decoder + TOTP authenticator Flask mini-service"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -9,8 +9,8 @@ license = { text = "MIT" }
 authors = [
   { name = "Josh Gompert" }
 ]
+[project.urls]
+Homepage = "https://ginkorea.one"
+Repository = "https://github.com/ginkorea/qr-pypass"
+Issues = "https://github.com/ginkorea/qr-pypass/issues"
 
-urls = {
-  Homepage = "https://github.com/ginkorea/qr-pypass",
-  Repository = "https://github.com/ginkorea/qr-pypass",
-}
