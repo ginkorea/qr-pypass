@@ -5,7 +5,11 @@ import os
 import tempfile
 
 import qrcode
-from flask import Flask, jsonify, request, render_template, send_file
+from flask import Flask, jsonify, request, render_template, send_file, redirect, url_for
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from PIL import Image
 
 from qrpypass.qr import scan_and_classify
 from qrpypass.generate import generate_payload
@@ -14,15 +18,13 @@ from qrpypass.auth import (
     parse_otpauth_uri,
     totp_now,
     totp_verify,
-    load_accounts,
-    save_accounts,
-    StoreError,
     OTPAuthError,
 )
 
+from .db import init_db, authenticate, create_user, get_user_by_id, upsert_totp_account, list_totp_accounts, get_totp_account
+
 
 def create_app() -> Flask:
-    # Ensure Flask can always locate templates/static in this package
     here = os.path.dirname(__file__)
     templates_dir = os.path.join(here, "templates")
     static_dir = os.path.join(here, "static")
@@ -34,11 +36,79 @@ def create_app() -> Flask:
         static_url_path="/static",
     )
 
+    # Required for sessions (set in env on PythonAnywhere / WSGI)
+    app.secret_key = os.environ.get("QRPYPASS_SECRET_KEY", "dev-unsafe-change-me")
+
+    # Upload size limit (e.g. 6 MB)
+    app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("QRPYPASS_MAX_UPLOAD_BYTES", str(6 * 1024 * 1024)))
+
+    # Rate limiting
+    limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
+
+    # DB init
+    init_db()
+
+    # Login setup
+    login_mgr = LoginManager()
+    login_mgr.login_view = "login"
+    login_mgr.init_app(app)
+
+    @login_mgr.user_loader
+    def load_user(user_id: str):
+        try:
+            return get_user_by_id(int(user_id))
+        except Exception:
+            return None
+
+    @app.get("/login")
+    def login():
+        return render_template("login.html")
+
+    @app.post("/login")
+    @limiter.limit("10 per minute")
+    def login_post():
+        email = (request.form.get("email") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        u = authenticate(email, password)
+        if not u:
+            return render_template("login.html", error="Invalid email/password"), 401
+        login_user(u)
+        return redirect(url_for("vault"))
+
+    @app.get("/register")
+    def register():
+        return render_template("register.html")
+
+    @app.post("/register")
+    @limiter.limit("5 per minute")
+    def register_post():
+        email = (request.form.get("email") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        try:
+            u = create_user(email, password)
+        except Exception as e:
+            return render_template("register.html", error=str(e)), 400
+        login_user(u)
+        return redirect(url_for("vault"))
+
+    @app.get("/logout")
+    @login_required
+    def logout():
+        logout_user()
+        return redirect(url_for("login"))
+
     @app.get("/")
+    @login_required
     def index():
         return render_template("index.html")
 
+    @app.get("/vault")
+    @login_required
+    def vault():
+        return render_template("vault.html")
+
     @app.get("/gen")
+    @login_required
     def gen_page():
         return render_template("gen.html")
 
@@ -46,13 +116,20 @@ def create_app() -> Flask:
     def health():
         return jsonify({"ok": True})
 
+    # ---------- helpers ----------
+    def _reject_huge_images(path: str) -> None:
+        # Prevent decompression bomb / giant images
+        with Image.open(path) as im:
+            w, h = im.size
+            max_dim = int(os.environ.get("QRPYPASS_MAX_IMAGE_DIM", "6000"))
+            if w > max_dim or h > max_dim:
+                raise ValueError(f"Image too large ({w}x{h}); max dimension is {max_dim}")
+
+    # ---------- SCAN ----------
     @app.post("/scan")
+    @login_required
+    @limiter.limit("30 per minute")
     def scan():
-        """
-        multipart/form-data:
-          file: (image) required
-          max_results: optional int
-        """
         if "file" not in request.files:
             return jsonify({"error": "missing form file field 'file'"}), 400
 
@@ -74,37 +151,31 @@ def create_app() -> Flask:
             f.save(tmp_path)
 
         try:
+            _reject_huge_images(tmp_path)
             hits = scan_and_classify(tmp_path, max_results=max_results_i)
             return jsonify({"count": len(hits), "results": [h.to_dict() for h in hits]})
         except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": str(e)}), 400
         finally:
             try:
                 os.remove(tmp_path)
             except Exception:
                 pass
 
+    # ---------- AUTH ----------
     @app.get("/auth/list")
+    @login_required
+    @limiter.limit("120 per minute")
     def auth_list():
-        passphrase = request.args.get("passphrase")  # optional
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-            return jsonify(
-                {"count": len(accounts), "accounts": [a.safe_dict() for a in accounts.values()]}
-            )
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
+        accounts = list_totp_accounts(current_user.id)
+        return jsonify({"count": len(accounts), "accounts": accounts})
 
     @app.post("/auth/import")
+    @login_required
+    @limiter.limit("20 per minute")
     def auth_import():
-        """
-        JSON:
-          { "otpauth_uri": "...", "passphrase": "optional" }
-        """
         data = request.get_json(silent=True) or {}
         uri = (data.get("otpauth_uri") or "").strip()
-        passphrase = data.get("passphrase")
-
         if not uri:
             return jsonify({"error": "Missing otpauth_uri"}), 400
 
@@ -113,52 +184,51 @@ def create_app() -> Flask:
         except OTPAuthError as e:
             return jsonify({"error": str(e)}), 400
 
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-            accounts[acc.id] = acc
-            save_accounts(accounts, passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
+        upsert_totp_account(
+            user_id=current_user.id,
+            acc_id=acc.id,
+            name=acc.name,
+            issuer=acc.issuer,
+            secret_b32=acc.secret_b32,
+            algorithm=acc.algorithm,
+            digits=acc.digits,
+            period=acc.period,
+        )
         return jsonify({"imported": acc.safe_dict()})
 
     @app.get("/auth/code")
+    @login_required
+    @limiter.limit("240 per minute")
     def auth_code():
-        """
-        Query:
-          id=<account_id>&passphrase=optional
-        """
         acc_id = (request.args.get("id") or "").strip()
-        passphrase = request.args.get("passphrase")
-
         if not acc_id:
             return jsonify({"error": "Missing id"}), 400
 
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
-        acc = accounts.get(acc_id)
-        if not acc:
+        row = get_totp_account(current_user.id, acc_id)
+        if not row:
             return jsonify({"error": "Unknown id"}), 404
 
+        # Build a transient OTPAuthAccount for totp_now
+        from qrpypass.auth.models import OTPAuthAccount
+        acc = OTPAuthAccount(
+            id=row["id"],
+            name=row["name"],
+            issuer=row["issuer"],
+            secret_b32=row["secret_b32"],
+            algorithm=row["algorithm"],
+            digits=row["digits"],
+            period=row["period"],
+        )
         code, remaining = totp_now(acc)
         return jsonify({"account": acc.safe_dict(), "code": code, "seconds_remaining": remaining})
 
     @app.post("/auth/verify")
+    @login_required
+    @limiter.limit("60 per minute")
     def auth_verify():
-        """
-        JSON:
-          { "id": "<account_id>", "code": "123456", "window": 1, "passphrase": "optional" }
-
-        Returns:
-          { ok: bool, matched_offset: int, account: {...} }
-        """
         data = request.get_json(silent=True) or {}
         acc_id = (data.get("id") or "").strip()
         code = (data.get("code") or "").strip()
-        passphrase = data.get("passphrase")
 
         try:
             window = int(data.get("window", 1))
@@ -170,14 +240,20 @@ def create_app() -> Flask:
         if not code:
             return jsonify({"error": "Missing code"}), 400
 
-        try:
-            accounts = load_accounts(passphrase=passphrase)
-        except StoreError as e:
-            return jsonify({"error": str(e)}), 400
-
-        acc = accounts.get(acc_id)
-        if not acc:
+        row = get_totp_account(current_user.id, acc_id)
+        if not row:
             return jsonify({"error": "Unknown id"}), 404
+
+        from qrpypass.auth.models import OTPAuthAccount
+        acc = OTPAuthAccount(
+            id=row["id"],
+            name=row["name"],
+            issuer=row["issuer"],
+            secret_b32=row["secret_b32"],
+            algorithm=row["algorithm"],
+            digits=row["digits"],
+            period=row["period"],
+        )
 
         try:
             ok, offset = totp_verify(acc, code, window=window)
@@ -186,20 +262,15 @@ def create_app() -> Flask:
 
         return jsonify({"ok": ok, "matched_offset": offset, "account": acc.safe_dict()})
 
+    # ---------- GENERATE ----------
     @app.post("/gen/payload")
+    @login_required
+    @limiter.limit("60 per minute")
     def gen_payload_api():
-        """
-        JSON:
-          { "kind": "url|text|totp", "params": {...}, "import": false, "passphrase": "optional" }
-
-        For totp: if import=true, store into authenticator store.
-        """
         data = request.get_json(silent=True) or {}
         kind = (data.get("kind") or "").strip()
         params = data.get("params", {}) or {}
-
         do_import = bool(data.get("import", False))
-        passphrase = data.get("passphrase")
 
         try:
             gp = generate_payload(kind, params)
@@ -210,21 +281,26 @@ def create_app() -> Flask:
         if do_import and gp.kind.value == "otpauth_totp":
             try:
                 acc = parse_otpauth_uri(gp.payload)
-                accounts = load_accounts(passphrase=passphrase)
-                accounts[acc.id] = acc
-                save_accounts(accounts, passphrase=passphrase)
+                upsert_totp_account(
+                    user_id=current_user.id,
+                    acc_id=acc.id,
+                    name=acc.name,
+                    issuer=acc.issuer,
+                    secret_b32=acc.secret_b32,
+                    algorithm=acc.algorithm,
+                    digits=acc.digits,
+                    period=acc.period,
+                )
                 imported = acc.safe_dict()
-            except (OTPAuthError, StoreError) as e:
+            except OTPAuthError as e:
                 return jsonify({"error": str(e)}), 400
 
         return jsonify({"generated": gp.to_dict(), "imported": imported})
 
     @app.post("/gen/qr")
+    @login_required
+    @limiter.limit("120 per minute")
     def gen_qr():
-        """
-        JSON: { "payload": "string", "box_size": 8, "border": 2 }
-        Returns: image/png
-        """
         data = request.get_json(silent=True) or {}
         payload = (data.get("payload") or "").strip()
         if not payload:

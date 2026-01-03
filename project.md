@@ -8,7 +8,7 @@
 | Total Directories | 13 |
 | Total Indexed Files | 36 |
 | Skipped Files | 5 |
-| Indexed Size | 60.89 KB |
+| Indexed Size | 69.51 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
@@ -113,6 +113,241 @@
 ## `README.md`
 
 ```markdown
+# qr-pypass
+
+**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service.  
+It is designed for air-gapped labs, automation pipelines, and security tooling where you need to:
+
+- Decode QR codes from screenshots or images
+- Classify QR payloads (URL, text, otpauth)
+- Generate QR codes programmatically
+- Generate, import, store, and verify TOTP (RFC 6238) secrets
+- Run everything locally with no cloud dependencies
+
+The project exposes both a **Python API** and a **Flask-based HTTP service with a minimal web UI**.
+
+---
+
+## Features
+
+### QR Decoding
+- Detects **multiple QR codes anywhere in an image**
+- Uses OpenCV with multi-pass detection and tiling fallback
+- Returns bounding boxes, corners, and decode method
+- Robust against screenshots, partial QRs, and large images
+
+### Payload Classification
+Automatically classifies decoded QR payloads as:
+- `url` (with normalization)
+- `text`
+- `otpauth` (TOTP provisioning URIs)
+
+### TOTP / OTPAuth
+- Generate RFC-compliant `otpauth://totp` URIs
+- Import existing provisioning URIs
+- Secure local storage (optional encryption at rest)
+- Generate current TOTP codes
+- Verify TOTP codes with configurable window
+
+### QR Generation
+- Generate QR codes for:
+  - URLs
+  - Arbitrary text
+  - TOTP provisioning URIs
+- Control box size and border
+- Returns PNG images
+
+### Service + UI
+- Flask API
+- Minimal web UI for:
+  - Uploading screenshots
+  - Viewing decoded QR payloads
+  - Generating QR codes
+  - Managing TOTP accounts
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/ginkorea/qr-pypass.git
+cd qr-pypass
+
+python -m venv .qr-env
+source .qr-env/bin/activate
+
+pip install -r requirements.txt
+pip install -e .
+````
+
+Python **3.9+** is required.
+
+---
+
+## Running the Service
+
+```bash
+python -m qrpypass.service.run
+```
+
+By default the service runs on:
+
+```
+http://127.0.0.1:5000
+```
+
+### Environment Variables
+
+| Variable             | Default       | Description               |
+| -------------------- | ------------- | ------------------------- |
+| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address              |
+| `QRPYPASS_PORT`      | `5000`        | Port                      |
+| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug        |
+| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Account storage directory |
+
+---
+
+## Web UI
+
+* `/` – QR scan UI (upload screenshots/images)
+* `/gen` – QR payload + TOTP generator
+
+No JavaScript frameworks, no external assets.
+
+---
+
+## API Overview
+
+### Health Check
+
+```http
+GET /health
+```
+
+### Scan QR Codes
+
+```http
+POST /scan
+Content-Type: multipart/form-data
+```
+
+**Form fields**
+
+* `file` (required) – image file
+* `max_results` (optional, default: 8)
+
+---
+
+### Generate Payload
+
+```http
+POST /gen/payload
+Content-Type: application/json
+```
+
+```json
+{
+  "kind": "url | text | totp",
+  "params": { ... },
+  "import": false,
+  "passphrase": null
+}
+```
+
+---
+
+### Generate QR Image
+
+```http
+POST /gen/qr
+Content-Type: application/json
+```
+
+```json
+{
+  "payload": "...",
+  "box_size": 8,
+  "border": 2
+}
+```
+
+Returns `image/png`.
+
+---
+
+### TOTP Endpoints
+
+| Endpoint            | Description           |
+| ------------------- | --------------------- |
+| `POST /auth/import` | Import otpauth URI    |
+| `GET /auth/list`    | List stored accounts  |
+| `GET /auth/code`    | Get current TOTP code |
+| `POST /auth/verify` | Verify TOTP code      |
+
+Optional `passphrase` encrypts the store at rest.
+
+---
+
+## Python API Example
+
+```python
+from qrpypass.qr import scan_and_classify
+
+hits = scan_and_classify("screenshot.png")
+for h in hits:
+    print(h.classification.kind, h.qr.payload)
+```
+
+---
+
+## Testing
+
+End-to-end API tests are included:
+
+```bash
+python test/api-test.py
+python test/full_api_smoke.py
+python test/test_totp_verify_flow.py
+```
+
+These tests cover:
+
+* QR generation → scan → classification
+* TOTP generation, import, code generation, and verification
+
+---
+
+## Security Notes
+
+* Secrets are never logged
+* TOTP store can be encrypted using a passphrase
+* No outbound network access
+* Suitable for air-gapped or lab environments
+
+---
+
+## Use Cases
+
+* QR extraction from screenshots (2FA enrollment, phishing analysis)
+* Headless TOTP verification in security tooling
+* Red-team / blue-team labs
+* Offline QR decoding pipelines
+* Lightweight local alternative to mobile authenticator apps
+
+---
+
+## License
+
+MIT
+
+---
+
+## Author
+
+**Josh Gompert**
+
+---
+
 
 ```
 
@@ -1567,6 +1802,12 @@ const maxResults = document.getElementById("maxResults");
 const statusEl = document.getElementById("status");
 const resultsEl = document.getElementById("results");
 
+const passEl = document.getElementById("passphrase");
+const autoImportEl = document.getElementById("autoImportOtp");
+
+// Track active timers so we can stop them on a new scan
+const activeIntervals = new Set();
+
 function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -1574,8 +1815,144 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
+function stopAllIntervals() {
+  for (const id of activeIntervals) clearInterval(id);
+  activeIntervals.clear();
+}
+
+async function postJson(url, body) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+async function getJson(url) {
+  const r = await fetch(url, { method: "GET" });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+function renderOtpAuthCard({ idx, rawUri }) {
+  // Unique ids for DOM nodes
+  const cardId = `otp-card-${idx}`;
+  const codeId = `otp-code-${idx}`;
+  const remId = `otp-rem-${idx}`;
+  const msgId = `otp-msg-${idx}`;
+  const btnId = `otp-btn-${idx}`;
+
+  resultsEl.insertAdjacentHTML(
+    "beforeend",
+    `
+    <div class="card" id="${cardId}">
+      <div><b>#${idx + 1}</b></div>
+      <div><b>kind:</b> otpauth</div>
+      <div class="muted">Provisioning URI detected (secret not displayed in UI).</div>
+
+      <div style="margin-top:12px;" class="row">
+        <button type="button" id="${btnId}">Import &amp; Show Code</button>
+        <span class="muted" id="${msgId}"></span>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div><b>code</b></div>
+        <div style="font-size:28px; font-family: ui-monospace, monospace;" id="${codeId}">—</div>
+        <div class="muted" id="${remId}"></div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div><b>raw payload</b></div>
+        <pre>${escapeHtml(rawUri)}</pre>
+      </div>
+    </div>
+    `
+  );
+
+  const btn = document.getElementById(btnId);
+  const msgEl = document.getElementById(msgId);
+  const codeEl = document.getElementById(codeId);
+  const remEl = document.getElementById(remId);
+
+  let accId = null;
+
+  async function refreshCodeOnce() {
+    if (!accId) return;
+    const passphrase = (passEl.value || "").trim();
+    const qs = new URLSearchParams({ id: accId });
+    if (passphrase) qs.set("passphrase", passphrase);
+
+    const res = await getJson(`/auth/code?${qs.toString()}`);
+    if (!res.ok) {
+      msgEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
+      return;
+    }
+
+    const code = res.data.code || "";
+    const remaining = res.data.seconds_remaining;
+
+    codeEl.textContent = code ? code : "—";
+    remEl.textContent =
+      (typeof remaining === "number")
+        ? `refresh in ${remaining}s`
+        : "";
+  }
+
+  function startLiveRefresh() {
+    // Do one immediate fetch, then tick every second
+    refreshCodeOnce();
+
+    const intervalId = setInterval(async () => {
+      // We intentionally re-fetch each second so countdown stays accurate
+      // (and we avoid building a fragile local countdown that drifts).
+      await refreshCodeOnce();
+    }, 1000);
+
+    activeIntervals.add(intervalId);
+  }
+
+  btn.addEventListener("click", async () => {
+    msgEl.textContent = "Importing...";
+    codeEl.textContent = "—";
+    remEl.textContent = "";
+
+    const passphrase = (passEl.value || "").trim();
+    const res = await postJson("/auth/import", {
+      otpauth_uri: rawUri,
+      passphrase: passphrase || null,
+    });
+
+    if (!res.ok) {
+      msgEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
+      return;
+    }
+
+    const imported = res.data.imported || {};
+    accId = imported.id || null;
+
+    if (!accId) {
+      msgEl.textContent = "Import failed (no id returned).";
+      return;
+    }
+
+    msgEl.textContent = `Imported id: ${accId}`;
+    startLiveRefresh();
+  });
+
+  // Optional: auto-import if enabled
+  const autoImport = !!(autoImportEl && autoImportEl.checked);
+  if (autoImport) {
+    // Slight delay so DOM is ready, then click programmatically
+    setTimeout(() => btn.click(), 0);
+  }
+}
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+
+  stopAllIntervals();
   resultsEl.innerHTML = "";
   statusEl.textContent = "Scanning...";
 
@@ -1610,12 +1987,17 @@ form.addEventListener("submit", async (e) => {
       const qr = item.qr || {};
       const bbox = (qr.bbox) ? JSON.stringify(qr.bbox) : "null";
 
+      // Special handling for otpauth: import + live code
+      if (cls.kind === "otpauth" && cls.raw) {
+        renderOtpAuthCard({ idx, rawUri: cls.raw });
+        return;
+      }
+
+      // Default card behavior (URL/TEXT/etc.)
       let extra = "";
       if (cls.kind === "url" && cls.normalized_url) {
         const u = escapeHtml(cls.normalized_url);
         extra = `<div><b>Open:</b> <a href="${u}" target="_blank" rel="noreferrer">${u}</a></div>`;
-      } else if (cls.kind === "otpauth") {
-        extra = `<div class="muted">Provisioning URI detected (secret not displayed).</div>`;
       }
 
       resultsEl.insertAdjacentHTML("beforeend", `
@@ -1890,16 +2272,28 @@ textarea {
 </head>
 <body>
   <h1>qr-pypass</h1>
-  <p class="muted">Upload a screenshot (PNG/JPG). The server will find and decode QR codes, then classify the payload.</p>
+  <p class="muted">
+    Upload a screenshot (PNG/JPG). The server will find and decode QR codes, then classify the payload.
+  </p>
 
   <div class="card">
     <form id="uploadForm" class="row">
       <input id="file" type="file" accept="image/*" required />
+
       <label>max_results
         <input id="maxResults" type="number" min="1" max="50" value="8" />
       </label>
+
+      <label class="row" style="gap:8px;">
+        <input id="autoImportOtp" type="checkbox" checked />
+        auto-import otpauth
+      </label>
+
+      <input id="passphrase" type="password" placeholder="store passphrase (optional)" />
+
       <button type="submit">Scan</button>
     </form>
+
     <p id="status" class="muted"></p>
   </div>
 
