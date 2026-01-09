@@ -249,3 +249,12 @@ def get_totp_account(user_id: int, acc_id: str) -> Optional[Dict[str, Any]]:
         "digits": int(r["digits"]),
         "period": int(r["period"]),
     }
+
+def delete_totp_account(user_id: int, acc_id: str) -> bool:
+    with connect() as c:
+        cur = c.execute(
+            "DELETE FROM totp_accounts WHERE user_id = ? AND id = ?",
+            (int(user_id), acc_id),
+        )
+        return cur.rowcount > 0
+
