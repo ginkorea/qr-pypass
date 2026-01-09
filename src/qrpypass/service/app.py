@@ -21,7 +21,7 @@ from qrpypass.auth import (
     OTPAuthError,
 )
 
-from .db import init_db, authenticate, create_user, get_user_by_id, upsert_totp_account, list_totp_accounts, get_totp_account
+from .db import init_db, authenticate, create_user, get_user_by_id, upsert_totp_account, list_totp_accounts, get_totp_account, delete_totp_account
 
 
 def create_app() -> Flask:
@@ -328,3 +328,19 @@ def create_app() -> Flask:
         return send_file(buf, mimetype="image/png")
 
     return app
+
+    @app.post("/auth/delete")
+	@login_required
+	@limiter.limit("60 per minute")
+	def auth_delete():
+    	data = request.get_json(silent=True) or {}
+    	acc_id = (data.get("id") or "").strip()
+    	if not acc_id:
+        	return jsonify({"error": "Missing id"}), 400
+
+    	ok = delete_totp_account(current_user.id, acc_id)
+    	if not ok:
+        	return jsonify({"error": "Unknown id"}), 404
+
+    	return jsonify({"deleted": acc_id})
+
