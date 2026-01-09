@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass vault</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<!-- qrpypass:favicons:begin -->
-<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
-<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
-<!-- qrpypass:favicons:end -->
+  <!-- qrpypass:favicons:begin -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+  <!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -33,7 +33,7 @@
   </header>
 
   <main class="container">
-    <p class="muted">Your stored authenticators. Click to show live code.</p>
+    <p class="muted">Your stored authenticators. Show a live code, hide it, or delete the entry.</p>
 
     <section class="card">
       <div id="vault"></div>
@@ -48,12 +48,36 @@
       return {ok:r.ok, status:r.status, data:d};
     }
 
+    async function postJson(url, body){
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      return {ok:r.ok, status:r.status, data:d};
+    }
+
     const vaultEl = document.getElementById("vault");
     const statusEl = document.getElementById("status");
-    const intervals = new Set();
 
-    function stopAll(){ for (const i of intervals) clearInterval(i); intervals.clear(); }
-    function esc(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+    // one interval per account id
+    const timersById = new Map();
+
+    function esc(s){
+      return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    }
+
+    function stopOne(id){
+      const t = timersById.get(id);
+      if (t) clearInterval(t);
+      timersById.delete(id);
+    }
+
+    function stopAll(){
+      for (const [id, t] of timersById.entries()) clearInterval(t);
+      timersById.clear();
+    }
 
     async function refreshOne(id){
       const res = await getJson(`/auth/code?id=${encodeURIComponent(id)}`);
@@ -61,14 +85,67 @@
       return res.data;
     }
 
+    function setHiddenUI(id){
+      const codeEl = document.getElementById(`code-${id}`);
+      const remEl  = document.getElementById(`rem-${id}`);
+      const btnEl  = document.getElementById(`toggle-${id}`);
+      if (codeEl) codeEl.textContent = "—";
+      if (remEl) remEl.textContent = "";
+      if (btnEl) btnEl.textContent = "Show code";
+    }
+
+    async function startLive(id){
+      stopOne(id); // ensure only one timer
+
+      const btnEl = document.getElementById(`toggle-${id}`);
+      if (btnEl) btnEl.textContent = "Hide";
+
+      async function tick(){
+        const d = await refreshOne(id);
+        if (!d) return;
+
+        const codeEl = document.getElementById(`code-${id}`);
+        const remEl  = document.getElementById(`rem-${id}`);
+        if (codeEl) codeEl.textContent = d.code || "—";
+        if (remEl) remEl.textContent =
+          (typeof d.seconds_remaining === "number") ? `refresh in ${d.seconds_remaining}s` : "";
+      }
+
+      await tick();
+      const t = setInterval(tick, 1000);
+      timersById.set(id, t);
+    }
+
+    async function deleteOne(id){
+      // stop & hide immediately for safety
+      stopOne(id);
+      setHiddenUI(id);
+
+      const ok = confirm("Delete this authenticator from your vault?");
+      if (!ok) return;
+
+      statusEl.textContent = "Deleting...";
+      const res = await postJson("/auth/delete", {id});
+
+      if (!res.ok){
+        statusEl.textContent = "Delete failed: " + (res.data.error || ("HTTP " + res.status));
+        return;
+      }
+
+      statusEl.textContent = "Deleted.";
+      await load(); // refresh list
+    }
+
     async function load(){
       stopAll();
       statusEl.textContent = "Loading...";
+
       const res = await getJson("/auth/list");
       if (!res.ok){
         statusEl.textContent = "Error loading vault.";
         return;
       }
+
       const accts = res.data.accounts || [];
       statusEl.textContent = `Accounts: ${accts.length}`;
 
@@ -76,30 +153,37 @@
         <div class="card subtle">
           <div><b>${esc(a.issuer || "")}</b> ${esc(a.name || "")}</div>
           <div class="muted">id: ${esc(a.id)}</div>
+
           <div style="margin-top:10px;" class="row">
-            <button type="button" data-id="${esc(a.id)}">Show code</button>
+            <button type="button" id="toggle-${esc(a.id)}" data-id="${esc(a.id)}">Show code</button>
+            <button type="button" class="danger" id="del-${esc(a.id)}" data-id="${esc(a.id)}">Delete</button>
+
             <div class="otp" id="code-${esc(a.id)}">—</div>
             <div class="muted" id="rem-${esc(a.id)}"></div>
           </div>
         </div>
       `).join("");
 
-      vaultEl.querySelectorAll("button[data-id]").forEach(btn => {
+      // Toggle show/hide
+      vaultEl.querySelectorAll("button[id^='toggle-']").forEach(btn => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-id");
-          const codeEl = document.getElementById(`code-${id}`);
-          const remEl  = document.getElementById(`rem-${id}`);
+          const isRunning = timersById.has(id);
 
-          async function tick(){
-            const d = await refreshOne(id);
-            if (!d) return;
-            codeEl.textContent = d.code || "—";
-            remEl.textContent = (typeof d.seconds_remaining === "number") ? `refresh in ${d.seconds_remaining}s` : "";
+          if (isRunning){
+            stopOne(id);
+            setHiddenUI(id);
+          } else {
+            await startLive(id);
           }
+        });
+      });
 
-          await tick();
-          const intv = setInterval(tick, 1000);
-          intervals.add(intv);
+      // Delete
+      vaultEl.querySelectorAll("button[id^='del-']").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-id");
+          await deleteOne(id);
         });
       });
     }
