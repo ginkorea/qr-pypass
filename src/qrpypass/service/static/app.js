@@ -38,7 +38,6 @@ async function getJson(url) {
 }
 
 function renderOtpAuthCard({ idx, rawUri }) {
-  // Unique ids for DOM nodes
   const cardId = `otp-card-${idx}`;
   const codeId = `otp-code-${idx}`;
   const remId = `otp-rem-${idx}`;
@@ -78,12 +77,14 @@ function renderOtpAuthCard({ idx, rawUri }) {
   const remEl = document.getElementById(remId);
 
   let accId = null;
+  let started = false;
 
   async function refreshCodeOnce() {
     if (!accId) return;
-    const qs = new URLSearchParams({ id: accId });
 
+    const qs = new URLSearchParams({ id: accId });
     const res = await getJson(`/auth/code?${qs.toString()}`);
+
     if (!res.ok) {
       msgEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
       return;
@@ -100,6 +101,9 @@ function renderOtpAuthCard({ idx, rawUri }) {
   }
 
   function startLiveRefresh() {
+    if (started) return;
+    started = true;
+
     refreshCodeOnce();
 
     const intervalId = setInterval(async () => {
