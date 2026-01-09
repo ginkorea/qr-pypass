@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<!-- qrpypass:favicons:begin -->
-<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
-<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
-<!-- qrpypass:favicons:end -->
+
+  <!-- qrpypass:favicons:begin -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+  <!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -38,11 +39,20 @@
     </p>
 
     <section class="card">
-      <form id="uploadForm" class="row">
+      <form id="uploadForm" class="row" autocomplete="off">
         <input id="file" type="file" accept="image/*" required />
 
         <label>max_results
           <input id="maxResults" type="number" min="1" max="50" value="8" />
+        </label>
+
+        <label>passphrase <span class="muted">(optional)</span>
+          <input
+            id="passphrase"
+            type="password"
+            placeholder="(only needed if you used one)"
+            autocomplete="new-password"
+          />
         </label>
 
         <label class="row" style="gap:8px;">

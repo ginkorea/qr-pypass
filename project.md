@@ -1,20 +1,21 @@
-# Project Compilation: qr-pypass
+# Project Compilation: mysite
 
 ## 🧾 Summary
 
 | Metric | Value |
 |:--|:--|
-| Root Directory | `/home/gompert/data/workspace/qr-pypass` |
-| Total Directories | 14 |
-| Total Indexed Files | 42 |
-| Skipped Files | 6 |
-| Indexed Size | 110.55 KB |
+| Root Directory | `/home/gompert/mysite` |
+| Total Directories | 15 |
+| Total Indexed Files | 43 |
+| Skipped Files | 12 |
+| Indexed Size | 146.72 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
 
 - [README.md](#readme-md)
-- [dist/qrpypass-0.1.1-py3-none-any.whl](#dist-qrpypass-0-1-1-py3-none-any-whl)
+- [_data/app.db](#data-app-db)
+- [dist/qrpypass-0.1.2-py3-none-any.whl](#dist-qrpypass-0-1-2-py3-none-any-whl)
 - [gitignore](#gitignore)
 - [pyproject.toml](#pyproject-toml)
 - [requirements.txt](#requirements-txt)
@@ -59,12 +60,14 @@
 ## 📂 Project Structure
 
 ```
+📁 _data/
+    📄 app.db
 📁 dist/
-    📄 qrpypass-0.1.1-py3-none-any.whl
-    📄 qrpypass-0.1.1.tar.gz
+    📄 qrpypass-0.1.2-py3-none-any.whl
+    📄 qrpypass-0.1.2.tar.gz
 📁 images/
+    📄 qr-logo.png
     📄 qr.png
-    📄 test.png
 📁 src/
     📁 qrpypass/
         📁 auth/
@@ -91,7 +94,13 @@
         📁 service/
             📁 static/
                 📄 app.js
+                📄 apple-touch-icon-180.png
+                📄 favicon-16.png
+                📄 favicon-32.png
+                📄 favicon-48.png
+                📄 favicon.ico
                 📄 gen.js
+                📄 icon-512.png
                 📄 style.css
             📁 templates/
                 📄 gen.html
@@ -117,7 +126,6 @@
     📄 full_api_smoke.py
     📄 test_totp_verify_flow.py
 📄 gitignore
-📄 project.md
 📄 pyproject.toml
 📄 README.md
 📄 requirements.txt
@@ -127,61 +135,99 @@
 ## `README.md`
 
 ```markdown
+![qr-pypass logo](images/qr-logo.png)
+
 # qr-pypass
 
-**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service.  
-It is designed for air-gapped labs, automation pipelines, and security tooling where you need to:
+**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service built for **offline-first security workflows**.
 
-- Decode QR codes from screenshots or images
-- Classify QR payloads (URL, text, otpauth)
-- Generate QR codes programmatically
-- Generate, import, store, and verify TOTP (RFC 6238) secrets
-- Run everything locally with no cloud dependencies
+It is designed for air-gapped labs, red-team and blue-team tooling, automation pipelines, and environments where QR codes and 2FA need to be processed **locally**, without mobile devices or cloud dependencies.
 
-The project exposes both a **Python API** and a **Flask-based HTTP service with a minimal web UI**.
+**Homepage:** [https://ginkorea.one](https://ginkorea.one)
+**Source:** [https://github.com/ginkorea/qr-pypass](https://github.com/ginkorea/qr-pypass)
+**PyPI:** [https://pypi.org/project/qrpypass/](https://pypi.org/project/qrpypass/)
 
 ---
 
-## Features
+## What It Does
+
+With `qr-pypass`, you can:
+
+* Decode QR codes from screenshots or images
+* Detect and classify QR payloads (URL, text, otpauth)
+* Generate QR codes programmatically
+* Generate, import, store, and verify TOTP (RFC 6238) secrets
+* Run everything locally with no outbound network access
+
+The project exposes both:
+
+* A **Python API** for direct integration
+* A **Flask-based HTTP service** with a minimal web UI
+
+---
+
+## Core Features
 
 ### QR Decoding
-- Detects **multiple QR codes anywhere in an image**
-- Uses OpenCV with multi-pass detection and tiling fallback
-- Returns bounding boxes, corners, and decode method
-- Robust against screenshots, partial QRs, and large images
+
+* Detects **multiple QR codes anywhere in an image**
+* Uses OpenCV with multi-pass detection and tiling fallback
+* Returns bounding boxes, corner points, and decode method
+* Robust against screenshots, partial QRs, and large images
 
 ### Payload Classification
-Automatically classifies decoded QR payloads as:
-- `url` (with normalization)
-- `text`
-- `otpauth` (TOTP provisioning URIs)
+
+Automatically classifies decoded payloads as:
+
+* `url` (with normalization)
+* `text`
+* `otpauth` (TOTP provisioning URIs)
 
 ### TOTP / OTPAuth
-- Generate RFC-compliant `otpauth://totp` URIs
-- Import existing provisioning URIs
-- Secure local storage (optional encryption at rest)
-- Generate current TOTP codes
-- Verify TOTP codes with configurable window
+
+* Generate RFC-compliant `otpauth://totp` URIs
+* Import existing provisioning URIs
+* Secure local storage (optional encryption at rest)
+* Generate current TOTP codes
+* Verify TOTP codes with configurable time window
 
 ### QR Generation
-- Generate QR codes for:
-  - URLs
-  - Arbitrary text
-  - TOTP provisioning URIs
-- Control box size and border
-- Returns PNG images
 
-### Service + UI
-- Flask API
-- Minimal web UI for:
-  - Uploading screenshots
-  - Viewing decoded QR payloads
-  - Generating QR codes
-  - Managing TOTP accounts
+* Generate QR codes for:
+
+  * URLs
+  * Arbitrary text
+  * TOTP provisioning URIs
+* Control box size and border
+* Outputs PNG images
+
+### Service and Web UI
+
+* Flask-based HTTP API
+* Minimal web UI for:
+
+  * Uploading screenshots or images
+  * Viewing decoded QR payloads
+  * Generating QR codes
+  * Managing stored TOTP accounts
+
+No JavaScript frameworks. No external assets.
 
 ---
 
 ## Installation
+
+### From PyPI
+
+```bash
+pip install qrpypass
+```
+
+Python **3.9+** is required.
+
+---
+
+### From Source (Development)
 
 ```bash
 git clone https://github.com/ginkorea/qr-pypass.git
@@ -192,9 +238,7 @@ source .qr-env/bin/activate
 
 pip install -r requirements.txt
 pip install -e .
-````
-
-Python **3.9+** is required.
+```
 
 ---
 
@@ -204,29 +248,32 @@ Python **3.9+** is required.
 python -m qrpypass.service.run
 ```
 
-By default the service runs on:
+By default, the service runs at:
 
 ```
 http://127.0.0.1:5000
 ```
 
-### Environment Variables
+---
 
-| Variable             | Default       | Description               |
-| -------------------- | ------------- | ------------------------- |
-| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address              |
-| `QRPYPASS_PORT`      | `5000`        | Port                      |
-| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug        |
-| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Account storage directory |
+## Configuration
+
+The service can be configured using environment variables:
+
+| Variable             | Default       | Description                     |
+| -------------------- | ------------- | ------------------------------- |
+| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address                    |
+| `QRPYPASS_PORT`      | `5000`        | Port                            |
+| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug mode         |
+| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Local account storage directory |
 
 ---
 
-## Web UI
+## Web UI Routes
 
-* `/` – QR scan UI (upload screenshots/images)
-* `/gen` – QR payload + TOTP generator
-
-No JavaScript frameworks, no external assets.
+* `/` – QR scan UI (upload screenshots or images)
+* `/gen` – QR payload and TOTP generator
+* `/vault` – Stored TOTP account management
 
 ---
 
@@ -237,6 +284,8 @@ No JavaScript frameworks, no external assets.
 ```http
 GET /health
 ```
+
+---
 
 ### Scan QR Codes
 
@@ -262,7 +311,7 @@ Content-Type: application/json
 ```json
 {
   "kind": "url | text | totp",
-  "params": { ... },
+  "params": { },
   "import": false,
   "passphrase": null
 }
@@ -298,7 +347,7 @@ Returns `image/png`.
 | `GET /auth/code`    | Get current TOTP code |
 | `POST /auth/verify` | Verify TOTP code      |
 
-Optional `passphrase` encrypts the store at rest.
+An optional `passphrase` encrypts the TOTP store at rest.
 
 ---
 
@@ -308,15 +357,15 @@ Optional `passphrase` encrypts the store at rest.
 from qrpypass.qr import scan_and_classify
 
 hits = scan_and_classify("screenshot.png")
-for h in hits:
-    print(h.classification.kind, h.qr.payload)
+for hit in hits:
+    print(hit.classification.kind, hit.qr.payload)
 ```
 
 ---
 
 ## Testing
 
-End-to-end API tests are included:
+End-to-end tests are included:
 
 ```bash
 python test/api-test.py
@@ -324,7 +373,7 @@ python test/full_api_smoke.py
 python test/test_totp_verify_flow.py
 ```
 
-These tests cover:
+These cover:
 
 * QR generation → scan → classification
 * TOTP generation, import, code generation, and verification
@@ -334,19 +383,19 @@ These tests cover:
 ## Security Notes
 
 * Secrets are never logged
-* TOTP store can be encrypted using a passphrase
+* TOTP storage can be encrypted at rest
 * No outbound network access
 * Suitable for air-gapped or lab environments
 
 ---
 
-## Use Cases
+## Common Use Cases
 
 * QR extraction from screenshots (2FA enrollment, phishing analysis)
 * Headless TOTP verification in security tooling
-* Red-team / blue-team labs
+* Red-team and blue-team labs
 * Offline QR decoding pipelines
-* Lightweight local alternative to mobile authenticator apps
+* Local alternatives to mobile authenticator apps
 
 ---
 
@@ -359,8 +408,7 @@ MIT
 ## Author
 
 **Josh Gompert**
-
----
+[https://ginkorea.one](https://ginkorea.one)
 
 
 ```
@@ -393,11 +441,6 @@ __pycache__/
 .ruff_cache/
 *.cache
 
-# Images (you want them locally but not committed)
-images/*.png
-images/*.jpg
-images/*.jpeg
-
 # OS files
 .DS_Store
 Thumbs.db
@@ -413,7 +456,7 @@ logs/
 ```toml
 [project]
 name = "qrpypass"
-version = "0.1.1"
+version = "0.1.2"
 description = "Headless QR decoder + TOTP authenticator Flask mini-service"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -423,8 +466,9 @@ authors = [
   { name = "Josh Gompert" }
 ]
 [project.urls]
-Homepage = "https://github.com/ginkorea/qr-pypass"
+Homepage = "https://ginkorea.one"
 Repository = "https://github.com/ginkorea/qr-pypass"
+Issues = "https://github.com/ginkorea/qr-pypass/issues"
 
 
 ```
@@ -451,7 +495,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="qrpypass",
-    version="0.1.1",
+    version="0.1.2",
     description="Headless QR decoder + TOTP authenticator Flask mini-service",
     author="Josh Gompert",
     author_email="",
@@ -474,72 +518,111 @@ setup(
 ```text
 Metadata-Version: 2.4
 Name: qrpypass
-Version: 0.1.1
+Version: 0.1.2
 Summary: Headless QR decoder + TOTP authenticator Flask mini-service
 Author: Josh Gompert
 Author-email: 
 License: MIT
-Project-URL: Homepage, https://github.com/ginkorea/qr-pypass
+Project-URL: Homepage, https://ginkorea.one
 Project-URL: Repository, https://github.com/ginkorea/qr-pypass
+Project-URL: Issues, https://github.com/ginkorea/qr-pypass/issues
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
 Dynamic: requires-python
 
+![qr-pypass logo](images/qr-logo.png)
+
 # qr-pypass
 
-**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service.  
-It is designed for air-gapped labs, automation pipelines, and security tooling where you need to:
+**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service built for **offline-first security workflows**.
 
-- Decode QR codes from screenshots or images
-- Classify QR payloads (URL, text, otpauth)
-- Generate QR codes programmatically
-- Generate, import, store, and verify TOTP (RFC 6238) secrets
-- Run everything locally with no cloud dependencies
+It is designed for air-gapped labs, red-team and blue-team tooling, automation pipelines, and environments where QR codes and 2FA need to be processed **locally**, without mobile devices or cloud dependencies.
 
-The project exposes both a **Python API** and a **Flask-based HTTP service with a minimal web UI**.
+**Homepage:** [https://ginkorea.one](https://ginkorea.one)
+**Source:** [https://github.com/ginkorea/qr-pypass](https://github.com/ginkorea/qr-pypass)
+**PyPI:** [https://pypi.org/project/qrpypass/](https://pypi.org/project/qrpypass/)
 
 ---
 
-## Features
+## What It Does
+
+With `qr-pypass`, you can:
+
+* Decode QR codes from screenshots or images
+* Detect and classify QR payloads (URL, text, otpauth)
+* Generate QR codes programmatically
+* Generate, import, store, and verify TOTP (RFC 6238) secrets
+* Run everything locally with no outbound network access
+
+The project exposes both:
+
+* A **Python API** for direct integration
+* A **Flask-based HTTP service** with a minimal web UI
+
+---
+
+## Core Features
 
 ### QR Decoding
-- Detects **multiple QR codes anywhere in an image**
-- Uses OpenCV with multi-pass detection and tiling fallback
-- Returns bounding boxes, corners, and decode method
-- Robust against screenshots, partial QRs, and large images
+
+* Detects **multiple QR codes anywhere in an image**
+* Uses OpenCV with multi-pass detection and tiling fallback
+* Returns bounding boxes, corner points, and decode method
+* Robust against screenshots, partial QRs, and large images
 
 ### Payload Classification
-Automatically classifies decoded QR payloads as:
-- `url` (with normalization)
-- `text`
-- `otpauth` (TOTP provisioning URIs)
+
+Automatically classifies decoded payloads as:
+
+* `url` (with normalization)
+* `text`
+* `otpauth` (TOTP provisioning URIs)
 
 ### TOTP / OTPAuth
-- Generate RFC-compliant `otpauth://totp` URIs
-- Import existing provisioning URIs
-- Secure local storage (optional encryption at rest)
-- Generate current TOTP codes
-- Verify TOTP codes with configurable window
+
+* Generate RFC-compliant `otpauth://totp` URIs
+* Import existing provisioning URIs
+* Secure local storage (optional encryption at rest)
+* Generate current TOTP codes
+* Verify TOTP codes with configurable time window
 
 ### QR Generation
-- Generate QR codes for:
-  - URLs
-  - Arbitrary text
-  - TOTP provisioning URIs
-- Control box size and border
-- Returns PNG images
 
-### Service + UI
-- Flask API
-- Minimal web UI for:
-  - Uploading screenshots
-  - Viewing decoded QR payloads
-  - Generating QR codes
-  - Managing TOTP accounts
+* Generate QR codes for:
+
+  * URLs
+  * Arbitrary text
+  * TOTP provisioning URIs
+* Control box size and border
+* Outputs PNG images
+
+### Service and Web UI
+
+* Flask-based HTTP API
+* Minimal web UI for:
+
+  * Uploading screenshots or images
+  * Viewing decoded QR payloads
+  * Generating QR codes
+  * Managing stored TOTP accounts
+
+No JavaScript frameworks. No external assets.
 
 ---
 
 ## Installation
+
+### From PyPI
+
+```bash
+pip install qrpypass
+```
+
+Python **3.9+** is required.
+
+---
+
+### From Source (Development)
 
 ```bash
 git clone https://github.com/ginkorea/qr-pypass.git
@@ -550,9 +633,7 @@ source .qr-env/bin/activate
 
 pip install -r requirements.txt
 pip install -e .
-````
-
-Python **3.9+** is required.
+```
 
 ---
 
@@ -562,29 +643,32 @@ Python **3.9+** is required.
 python -m qrpypass.service.run
 ```
 
-By default the service runs on:
+By default, the service runs at:
 
 ```
 http://127.0.0.1:5000
 ```
 
-### Environment Variables
+---
 
-| Variable             | Default       | Description               |
-| -------------------- | ------------- | ------------------------- |
-| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address              |
-| `QRPYPASS_PORT`      | `5000`        | Port                      |
-| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug        |
-| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Account storage directory |
+## Configuration
+
+The service can be configured using environment variables:
+
+| Variable             | Default       | Description                     |
+| -------------------- | ------------- | ------------------------------- |
+| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address                    |
+| `QRPYPASS_PORT`      | `5000`        | Port                            |
+| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug mode         |
+| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Local account storage directory |
 
 ---
 
-## Web UI
+## Web UI Routes
 
-* `/` – QR scan UI (upload screenshots/images)
-* `/gen` – QR payload + TOTP generator
-
-No JavaScript frameworks, no external assets.
+* `/` – QR scan UI (upload screenshots or images)
+* `/gen` – QR payload and TOTP generator
+* `/vault` – Stored TOTP account management
 
 ---
 
@@ -595,6 +679,8 @@ No JavaScript frameworks, no external assets.
 ```http
 GET /health
 ```
+
+---
 
 ### Scan QR Codes
 
@@ -620,7 +706,7 @@ Content-Type: application/json
 ```json
 {
   "kind": "url | text | totp",
-  "params": { ... },
+  "params": { },
   "import": false,
   "passphrase": null
 }
@@ -656,7 +742,7 @@ Returns `image/png`.
 | `GET /auth/code`    | Get current TOTP code |
 | `POST /auth/verify` | Verify TOTP code      |
 
-Optional `passphrase` encrypts the store at rest.
+An optional `passphrase` encrypts the TOTP store at rest.
 
 ---
 
@@ -666,15 +752,15 @@ Optional `passphrase` encrypts the store at rest.
 from qrpypass.qr import scan_and_classify
 
 hits = scan_and_classify("screenshot.png")
-for h in hits:
-    print(h.classification.kind, h.qr.payload)
+for hit in hits:
+    print(hit.classification.kind, hit.qr.payload)
 ```
 
 ---
 
 ## Testing
 
-End-to-end API tests are included:
+End-to-end tests are included:
 
 ```bash
 python test/api-test.py
@@ -682,7 +768,7 @@ python test/full_api_smoke.py
 python test/test_totp_verify_flow.py
 ```
 
-These tests cover:
+These cover:
 
 * QR generation → scan → classification
 * TOTP generation, import, code generation, and verification
@@ -692,19 +778,19 @@ These tests cover:
 ## Security Notes
 
 * Secrets are never logged
-* TOTP store can be encrypted using a passphrase
+* TOTP storage can be encrypted at rest
 * No outbound network access
 * Suitable for air-gapped or lab environments
 
 ---
 
-## Use Cases
+## Common Use Cases
 
 * QR extraction from screenshots (2FA enrollment, phishing analysis)
 * Headless TOTP verification in security tooling
-* Red-team / blue-team labs
+* Red-team and blue-team labs
 * Offline QR decoding pipelines
-* Lightweight local alternative to mobile authenticator apps
+* Local alternatives to mobile authenticator apps
 
 ---
 
@@ -717,8 +803,7 @@ MIT
 ## Author
 
 **Josh Gompert**
-
----
+[https://ginkorea.one](https://ginkorea.one)
 
 
 ```
@@ -2598,37 +2683,54 @@ form.addEventListener("submit", async (e) => {
 ## `src/qrpypass/service/static/gen.js`
 
 ```javascript
-const kindEl = document.getElementById("kind");
-const fieldsEl = document.getElementById("fields");
-const statusEl = document.getElementById("status");
-const outEl = document.getElementById("out");
-const btnGen = document.getElementById("btnGen");
-const passEl = document.getElementById("passphrase");
-const importEl = document.getElementById("doImport");
+// src/qrpypass/service/static/gen.js
+(() => {
+  const kindEl = document.getElementById("kind");
+  const fieldsEl = document.getElementById("fields");
+  const statusEl = document.getElementById("status");
+  const outEl = document.getElementById("out");
+  const btnGen = document.getElementById("btnGen");
+  const importEl = document.getElementById("doImport");
 
-function esc(s){
-  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
-}
+  // Optional: recent UI removed this input, so it may be null.
+  const passEl = document.getElementById("passphrase");
 
-function fieldRow(html){
-  return `<div class="row" style="margin-top:10px;">${html}</div>`;
-}
+  // Track last blob URL so we can revoke it (avoid leaking memory)
+  let lastObjUrl = null;
 
-function renderFields(){
-  const k = kindEl.value;
-  if (k === "url"){
-    fieldsEl.innerHTML = fieldRow(`
-      <input id="url" style="flex:1" placeholder="https://example.com" />
-    `);
-  } else if (k === "text"){
-    fieldsEl.innerHTML = `
-      <textarea id="text" rows="4" style="width:100%; padding:10px;" placeholder="Any text payload..."></textarea>
-    `;
-  } else {
+  function esc(s) {
+    return String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  function fieldRow(html) {
+    return `<div class="row" style="margin-top:10px;">${html}</div>`;
+  }
+
+  function renderFields() {
+    const k = kindEl.value;
+
+    if (k === "url") {
+      fieldsEl.innerHTML = fieldRow(`
+        <input id="url" style="flex:1" placeholder="https://example.com" />
+      `);
+      return;
+    }
+
+    if (k === "text") {
+      fieldsEl.innerHTML = `
+        <textarea id="text" rows="4" style="width:100%; padding:10px;" placeholder="Any text payload."></textarea>
+      `;
+      return;
+    }
+
+    // totp (otpauth)
     fieldsEl.innerHTML = `
       ${fieldRow(`
-        <input id="issuer" placeholder="issuer (e.g., ACME)" />
-        <input id="account_name" placeholder="account (e.g., alice@example.com)" style="min-width:280px;" />
+        <input id="issuer" placeholder="issuer (e.g. ACME)" />
+        <input id="account_name" placeholder="account (e.g. alice@example.com)" style="min-width:280px;" />
       `)}
       ${fieldRow(`
         <label>digits <input id="digits" type="number" min="6" max="8" value="6" /></label>
@@ -2647,84 +2749,173 @@ function renderFields(){
       </div>
     `;
   }
-}
 
-async function postJson(url, body){
-  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
-  const d = await r.json().catch(() => ({}));
-  return {ok: r.ok, status: r.status, data: d};
-}
-
-btnGen.addEventListener("click", async () => {
-  outEl.innerHTML = "";
-  statusEl.textContent = "Generating...";
-
-  const k = kindEl.value;
-  const params = {};
-
-  if (k === "url"){
-    params.url = (document.getElementById("url").value || "").trim();
-  } else if (k === "text"){
-    params.text = (document.getElementById("text").value || "").trim();
-  } else {
-    params.issuer = (document.getElementById("issuer").value || "").trim();
-    params.account_name = (document.getElementById("account_name").value || "").trim();
-    params.digits = Number(document.getElementById("digits").value || 6);
-    params.period = Number(document.getElementById("period").value || 30);
-    params.algorithm = (document.getElementById("algorithm").value || "SHA1").trim();
-    params.nbytes = Number(document.getElementById("nbytes").value || 20);
+  async function postJson(url, body) {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data: d };
   }
 
-  const passphrase = (passEl.value || "").trim();
-  const doImport = !!importEl.checked;
+  function clearOldPreviewUrl() {
+    if (lastObjUrl) {
+      try {
+        URL.revokeObjectURL(lastObjUrl);
+      } catch (_) {}
+      lastObjUrl = null;
+    }
+  }
 
-  const res = await postJson("/gen/payload", {
-    kind: k,
-    params,
-    import: doImport,
-    passphrase: passphrase || null,
+  function buildParams(kind) {
+    const params = {};
+
+    if (kind === "url") {
+      params.url = (document.getElementById("url")?.value || "").trim();
+      return params;
+    }
+
+    if (kind === "text") {
+      params.text = (document.getElementById("text")?.value || "").trim();
+      return params;
+    }
+
+    // totp
+    params.issuer = (document.getElementById("issuer")?.value || "").trim();
+    params.account_name = (document.getElementById("account_name")?.value || "").trim();
+    params.digits = Number(document.getElementById("digits")?.value || 6);
+    params.period = Number(document.getElementById("period")?.value || 30);
+    params.algorithm = (document.getElementById("algorithm")?.value || "SHA1").trim();
+    params.nbytes = Number(document.getElementById("nbytes")?.value || 20);
+    return params;
+  }
+
+  function suggestFilename(kind) {
+    const ts = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
+    if (kind === "url") return `qr-url-${ts}.png`;
+    if (kind === "text") return `qr-text-${ts}.png`;
+    return `qr-totp-${ts}.png`;
+  }
+
+  btnGen.addEventListener("click", async () => {
+    outEl.innerHTML = "";
+    statusEl.textContent = "Generating...";
+    clearOldPreviewUrl();
+
+    try {
+      const k = kindEl.value;
+      const params = buildParams(k);
+
+      // Optional passphrase (safe if input removed)
+      const passphrase = passEl ? (passEl.value || "").trim() : "";
+      const doImport = !!(importEl && importEl.checked);
+
+      // 1) Generate payload
+      const res = await postJson("/gen/payload", {
+        kind: k,
+        params,
+        import: doImport,
+        passphrase: passphrase || null,
+      });
+
+      if (!res.ok) {
+        statusEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
+        return;
+      }
+
+      const gen = res.data.generated || {};
+      const payload = gen.payload || "";
+
+      // 2) Render QR png from payload
+      const qrResp = await fetch("/gen/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload, box_size: 8, border: 2 }),
+      });
+
+      let previewHtml = "";
+      if (qrResp.ok) {
+        const blob = await qrResp.blob();
+        const objUrl = URL.createObjectURL(blob);
+        lastObjUrl = objUrl;
+
+        const filename = suggestFilename(k);
+
+        previewHtml = `
+          <div class="card">
+            <div class="row" style="justify-content:space-between; align-items:center;">
+              <div><b>QR preview</b></div>
+              <a class="btn" href="${objUrl}" download="${esc(filename)}">Download PNG</a>
+            </div>
+            <div style="margin-top:10px;">
+              <img src="${objUrl}" alt="qr" style="max-width:360px; width:100%; height:auto; border-radius:10px;" />
+            </div>
+          </div>
+        `;
+      } else {
+        // Attempt to surface server error text if any
+        let msg = "";
+        try {
+          msg = await qrResp.text();
+        } catch (_) {}
+        previewHtml = `
+          <div class="card">
+            <b>QR render failed</b>
+            <div class="muted">HTTP ${qrResp.status}${msg ? " :: " + esc(msg.slice(0, 300)) : ""}</div>
+          </div>
+        `;
+      }
+
+      // 3) Show details
+      const metaJson = esc(JSON.stringify(gen.meta || {}, null, 2));
+      const payloadEsc = esc(payload);
+
+      statusEl.textContent = "Generated.";
+
+      outEl.innerHTML = `
+        ${previewHtml}
+        <div class="card">
+          <div><b>kind:</b> ${esc(gen.kind || "")}</div>
+
+          <div style="margin-top:10px;" class="row">
+            <button type="button" id="btnCopyPayload">Copy payload</button>
+            ${res.data.imported && res.data.imported.id
+              ? `<span class="muted">Imported id: ${esc(res.data.imported.id)}</span>`
+              : `<span class="muted">${doImport ? "Import requested (no id returned)." : ""}</span>`}
+          </div>
+
+          <div style="margin-top:10px;"><b>payload</b></div>
+          <pre id="payloadPre">${payloadEsc}</pre>
+
+          <div style="margin-top:10px;"><b>meta</b></div>
+          <pre>${metaJson}</pre>
+        </div>
+      `;
+
+      // Copy button handler
+      const btnCopy = document.getElementById("btnCopyPayload");
+      if (btnCopy) {
+        btnCopy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(payload);
+            btnCopy.textContent = "Copied";
+            setTimeout(() => (btnCopy.textContent = "Copy payload"), 900);
+          } catch (e) {
+            btnCopy.textContent = "Copy failed";
+            setTimeout(() => (btnCopy.textContent = "Copy payload"), 1200);
+          }
+        });
+      }
+    } catch (err) {
+      statusEl.textContent = "Error: " + (err?.message || String(err));
+    }
   });
 
-  if (!res.ok){
-    statusEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
-    return;
-  }
-
-  const gen = res.data.generated || {};
-  statusEl.textContent = "Generated.";
-
-  // Render QR image
-  const qrRes = await fetch("/gen/qr", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({payload: gen.payload, box_size: 8, border: 2})
-  });
-
-  let imgHtml = "";
-  if (qrRes.ok){
-    const blob = await qrRes.blob();
-    const objUrl = URL.createObjectURL(blob);
-    imgHtml = `<div class="card"><div><b>QR preview</b></div><img src="${objUrl}" alt="qr" style="margin-top:10px; max-width:360px;"></div>`;
-  }
-
-  const metaJson = esc(JSON.stringify(gen.meta || {}, null, 2));
-  const payloadEsc = esc(gen.payload || "");
-
-  outEl.innerHTML = `
-    ${imgHtml}
-    <div class="card">
-      <div><b>kind:</b> ${esc(gen.kind || "")}</div>
-      <div style="margin-top:10px;"><b>payload</b></div>
-      <pre>${payloadEsc}</pre>
-      <div style="margin-top:10px;"><b>meta</b></div>
-      <pre>${metaJson}</pre>
-      ${res.data.imported ? `<div class="muted">Imported id: ${esc(res.data.imported.id)}</div>` : ""}
-    </div>
-  `;
-});
-
-kindEl.addEventListener("change", renderFields);
-renderFields();
+  kindEl.addEventListener("change", renderFields);
+  renderFields();
+})();
 
 ```
 
@@ -2959,6 +3150,13 @@ a{ color: var(--accent); }
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass generator</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<!-- qrpypass:favicons:begin -->
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+<!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -3029,6 +3227,13 @@ a{ color: var(--accent); }
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<!-- qrpypass:favicons:begin -->
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+<!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -3092,6 +3297,13 @@ a{ color: var(--accent); }
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass login</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<!-- qrpypass:favicons:begin -->
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+<!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -3159,6 +3371,13 @@ a{ color: var(--accent); }
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass register</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<!-- qrpypass:favicons:begin -->
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+<!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -3231,6 +3450,13 @@ a{ color: var(--accent); }
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass vault</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<!-- qrpypass:favicons:begin -->
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+<!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -3783,12 +4009,14 @@ if __name__ == "__main__":
 <summary>📁 Final Project Structure</summary>
 
 ```
+📁 _data/
+    📄 app.db
 📁 dist/
-    📄 qrpypass-0.1.1-py3-none-any.whl
-    📄 qrpypass-0.1.1.tar.gz
+    📄 qrpypass-0.1.2-py3-none-any.whl
+    📄 qrpypass-0.1.2.tar.gz
 📁 images/
+    📄 qr-logo.png
     📄 qr.png
-    📄 test.png
 📁 src/
     📁 qrpypass/
         📁 auth/
@@ -3815,7 +4043,13 @@ if __name__ == "__main__":
         📁 service/
             📁 static/
                 📄 app.js
+                📄 apple-touch-icon-180.png
+                📄 favicon-16.png
+                📄 favicon-32.png
+                📄 favicon-48.png
+                📄 favicon.ico
                 📄 gen.js
+                📄 icon-512.png
                 📄 style.css
             📁 templates/
                 📄 gen.html
@@ -3841,7 +4075,6 @@ if __name__ == "__main__":
     📄 full_api_smoke.py
     📄 test_totp_verify_flow.py
 📄 gitignore
-📄 project.md
 📄 pyproject.toml
 📄 README.md
 📄 requirements.txt

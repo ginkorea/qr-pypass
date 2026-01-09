@@ -4,7 +4,6 @@ const maxResults = document.getElementById("maxResults");
 const statusEl = document.getElementById("status");
 const resultsEl = document.getElementById("results");
 
-const passEl = document.getElementById("passphrase");
 const autoImportEl = document.getElementById("autoImportOtp");
 
 // Track active timers so we can stop them on a new scan
@@ -82,9 +81,7 @@ function renderOtpAuthCard({ idx, rawUri }) {
 
   async function refreshCodeOnce() {
     if (!accId) return;
-    const passphrase = (passEl.value || "").trim();
     const qs = new URLSearchParams({ id: accId });
-    if (passphrase) qs.set("passphrase", passphrase);
 
     const res = await getJson(`/auth/code?${qs.toString()}`);
     if (!res.ok) {
@@ -103,12 +100,9 @@ function renderOtpAuthCard({ idx, rawUri }) {
   }
 
   function startLiveRefresh() {
-    // Do one immediate fetch, then tick every second
     refreshCodeOnce();
 
     const intervalId = setInterval(async () => {
-      // We intentionally re-fetch each second so countdown stays accurate
-      // (and we avoid building a fragile local countdown that drifts).
       await refreshCodeOnce();
     }, 1000);
 
@@ -120,10 +114,8 @@ function renderOtpAuthCard({ idx, rawUri }) {
     codeEl.textContent = "—";
     remEl.textContent = "";
 
-    const passphrase = (passEl.value || "").trim();
     const res = await postJson("/auth/import", {
       otpauth_uri: rawUri,
-      passphrase: passphrase || null,
     });
 
     if (!res.ok) {
@@ -146,7 +138,6 @@ function renderOtpAuthCard({ idx, rawUri }) {
   // Optional: auto-import if enabled
   const autoImport = !!(autoImportEl && autoImportEl.checked);
   if (autoImport) {
-    // Slight delay so DOM is ready, then click programmatically
     setTimeout(() => btn.click(), 0);
   }
 }
@@ -170,7 +161,7 @@ form.addEventListener("submit", async (e) => {
 
   try {
     const resp = await fetch("/scan", { method: "POST", body: fd });
-    const data = await resp.json();
+    const data = await resp.json().catch(() => ({}));
 
     if (!resp.ok) {
       statusEl.textContent = "Error: " + (data.error || resp.statusText);
