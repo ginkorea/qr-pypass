@@ -13,7 +13,6 @@ from PIL import Image
 
 from qrpypass.qr import scan_and_classify
 from qrpypass.generate import generate_payload
-
 from qrpypass.auth import (
     parse_otpauth_uri,
     totp_now,
@@ -21,7 +20,16 @@ from qrpypass.auth import (
     OTPAuthError,
 )
 
-from .db import init_db, authenticate, create_user, get_user_by_id, upsert_totp_account, list_totp_accounts, get_totp_account, delete_totp_account
+from .db import (
+    init_db,
+    authenticate,
+    create_user,
+    get_user_by_id,
+    upsert_totp_account,
+    list_totp_accounts,
+    get_totp_account,
+    delete_totp_account,
+)
 
 
 def create_app() -> Flask:
@@ -40,7 +48,9 @@ def create_app() -> Flask:
     app.secret_key = os.environ.get("QRPYPASS_SECRET_KEY", "dev-unsafe-change-me")
 
     # Upload size limit (e.g. 6 MB)
-    app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("QRPYPASS_MAX_UPLOAD_BYTES", str(6 * 1024 * 1024)))
+    app.config["MAX_CONTENT_LENGTH"] = int(
+        os.environ.get("QRPYPASS_MAX_UPLOAD_BYTES", str(6 * 1024 * 1024))
+    )
 
     # Rate limiting
     limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
@@ -196,6 +206,21 @@ def create_app() -> Flask:
         )
         return jsonify({"imported": acc.safe_dict()})
 
+    @app.post("/auth/delete")
+    @login_required
+    @limiter.limit("60 per minute")
+    def auth_delete():
+        data = request.get_json(silent=True) or {}
+        acc_id = (data.get("id") or "").strip()
+        if not acc_id:
+            return jsonify({"error": "Missing id"}), 400
+
+        ok = delete_totp_account(current_user.id, acc_id)
+        if not ok:
+            return jsonify({"error": "Unknown id"}), 404
+
+        return jsonify({"deleted": acc_id})
+
     @app.get("/auth/code")
     @login_required
     @limiter.limit("240 per minute")
@@ -210,6 +235,7 @@ def create_app() -> Flask:
 
         # Build a transient OTPAuthAccount for totp_now
         from qrpypass.auth.models import OTPAuthAccount
+
         acc = OTPAuthAccount(
             id=row["id"],
             name=row["name"],
@@ -245,6 +271,7 @@ def create_app() -> Flask:
             return jsonify({"error": "Unknown id"}), 404
 
         from qrpypass.auth.models import OTPAuthAccount
+
         acc = OTPAuthAccount(
             id=row["id"],
             name=row["name"],
@@ -328,19 +355,3 @@ def create_app() -> Flask:
         return send_file(buf, mimetype="image/png")
 
     return app
-
-    @app.post("/auth/delete")
-	@login_required
-	@limiter.limit("60 per minute")
-	def auth_delete():
-    	data = request.get_json(silent=True) or {}
-    	acc_id = (data.get("id") or "").strip()
-    	if not acc_id:
-        	return jsonify({"error": "Missing id"}), 400
-
-    	ok = delete_totp_account(current_user.id, acc_id)
-    	if not ok:
-        	return jsonify({"error": "Unknown id"}), 404
-
-    	return jsonify({"deleted": acc_id})
-
