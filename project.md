@@ -6,15 +6,16 @@
 |:--|:--|
 | Root Directory | `/home/gompert/data/workspace/qr-pypass` |
 | Total Directories | 15 |
-| Total Indexed Files | 46 |
+| Total Indexed Files | 48 |
 | Skipped Files | 12 |
-| Indexed Size | 186.10 KB |
+| Indexed Size | 202.85 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
 
+- [.gitignore](#gitignore)
 - [README.md](#readme-md)
-- [dist/qrpypass-0.2.0-py3-none-any.whl](#dist-qrpypass-0-2-0-py3-none-any-whl)
+- [dist/qrpypass-0.2.2-py3-none-any.whl](#dist-qrpypass-0-2-2-py3-none-any-whl)
 - [gitignore](#gitignore)
 - [pyproject.toml](#pyproject-toml)
 - [requirements.txt](#requirements-txt)
@@ -41,6 +42,7 @@
 - [src/qrpypass/qr/models.py](#src-qrpypass-qr-models-py)
 - [src/qrpypass/qr/pipeline.py](#src-qrpypass-qr-pipeline-py)
 - [src/qrpypass/qr/scan.py](#src-qrpypass-qr-scan-py)
+- [src/qrpypass/service/__init__.py](#src-qrpypass-service-init-py)
 - [src/qrpypass/service/app.py](#src-qrpypass-service-app-py)
 - [src/qrpypass/service/db.py](#src-qrpypass-service-db-py)
 - [src/qrpypass/service/project.md](#src-qrpypass-service-project-md)
@@ -64,8 +66,8 @@
 
 ```
 📁 dist/
-    📄 qrpypass-0.2.0-py3-none-any.whl
-    📄 qrpypass-0.2.0.tar.gz
+    📄 qrpypass-0.2.2-py3-none-any.whl
+    📄 qrpypass-0.2.2.tar.gz
 📁 images/
     📄 qr-logo.png
     📄 qr.png
@@ -110,6 +112,7 @@
                 📄 login.html
                 📄 register.html
                 📄 vault.html
+            📄 __init__.py
             📄 app.py
             📄 db.py
             📄 project.md
@@ -137,6 +140,13 @@
 📄 requirements.txt
 📄 setup.py
 📄 update_favicons_and_html.py
+```
+
+## `.gitignore`
+
+```text
+*.egg-info/
+
 ```
 
 ## `README.md`
@@ -463,7 +473,7 @@ logs/
 ```toml
 [project]
 name = "qrpypass"
-version = "0.2.0"
+version = "0.2.2"
 description = "Headless QR decoder + TOTP authenticator Flask mini-service"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -490,7 +500,7 @@ qrcode[pil]>=7.4.2
 Pillow>=10.0.0
 Flask-Login>=0.6.3
 Flask-Limiter>=3.7.0
-
+pyzbar>=1.9.0
 
 
 ```
@@ -502,7 +512,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="qrpypass",
-    version="0.2.0",
+    version="0.2.2",
     description="Headless QR decoder + TOTP authenticator Flask mini-service",
     author="Josh Gompert",
     author_email="",
@@ -525,7 +535,7 @@ setup(
 ```text
 Metadata-Version: 2.4
 Name: qrpypass
-Version: 0.2.0
+Version: 0.2.2
 Summary: Headless QR decoder + TOTP authenticator Flask mini-service
 Author: Josh Gompert
 Author-email: 
@@ -843,6 +853,10 @@ src/qrpypass/qr/decode.py
 src/qrpypass/qr/models.py
 src/qrpypass/qr/pipeline.py
 src/qrpypass/qr/scan.py
+src/qrpypass/service/__init__.py
+src/qrpypass/service/app.py
+src/qrpypass/service/db.py
+src/qrpypass/service/run.py
 test/test_totp_verify_flow.py
 ```
 
@@ -1628,29 +1642,50 @@ __all__ = ["QRResult", "scan_qr_anywhere", "ScanHit", "scan_and_classify"]
 
 ```python
 from __future__ import annotations
-from typing import List, Tuple
+
+from typing import List, Tuple, Optional
 import cv2
 import numpy as np
+
 from .models import QRResult
+
 
 class QRDecodeError(RuntimeError):
     pass
+
+
+# ----------------------------
+# Helpers
+# ----------------------------
 
 def _bbox_from_corners(corners: np.ndarray) -> Tuple[int, int, int, int]:
     xs, ys = corners[:, 0], corners[:, 1]
     x0, y0 = int(xs.min()), int(ys.min())
     x1, y1 = int(xs.max()), int(ys.max())
-    return x0, y0, max(1, x1-x0), max(1, y1-y0)
+    return x0, y0, max(1, x1 - x0), max(1, y1 - y0)
 
-def decode_multi(img: np.ndarray) -> List[QRResult]:
-    det = cv2.QRCodeDetector()
+
+# ----------------------------
+# OpenCV QRCodeDetector decoders
+# ----------------------------
+
+def decode_multi(img: np.ndarray, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
+    """
+    Decode multiple QR codes from an image using OpenCV.
+    Optionally accept a shared QRCodeDetector instance for performance.
+    """
+    if det is None:
+        det = cv2.QRCodeDetector()
+
     try:
         ok, data_list, points, _ = det.detectAndDecodeMulti(img)
     except Exception:
         return []
+
     if not ok or not data_list:
         return []
-    results = []
+
+    results: List[QRResult] = []
     for i, data in enumerate(data_list):
         if not data:
             continue
@@ -1659,14 +1694,83 @@ def decode_multi(img: np.ndarray) -> List[QRResult]:
         results.append(QRResult(payload=data, corners=corners, bbox=bbox, method="multi"))
     return results
 
-def decode_single(img: np.ndarray) -> List[QRResult]:
-    det = cv2.QRCodeDetector()
-    data, pts, _ = det.detectAndDecode(img)
+
+def decode_single(img: np.ndarray, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
+    """
+    Decode a single QR code from an image using OpenCV.
+    Optionally accept a shared QRCodeDetector instance for performance.
+    """
+    if det is None:
+        det = cv2.QRCodeDetector()
+
+    try:
+        data, pts, _ = det.detectAndDecode(img)
+    except Exception:
+        return []
+
     if not data:
         return []
+
     corners = pts.astype(np.float32) if pts is not None else None
     bbox = _bbox_from_corners(corners) if corners is not None else None
     return [QRResult(payload=data, corners=corners, bbox=bbox, method="single")]
+
+
+# ----------------------------
+# pyzbar (zbar) decoder
+# ----------------------------
+
+def decode_pyzbar(img: np.ndarray) -> List[QRResult]:
+    """
+    Decode QR codes using pyzbar/zbar.
+    Works great on "real world" / branded QRs where OpenCV often fails.
+
+    Input must be a single-channel grayscale uint8 image (pyzbar can handle
+    other shapes too, but we keep it strict and fast here).
+    """
+    try:
+        from pyzbar.pyzbar import decode as zbar_decode
+    except Exception:
+        return []
+
+    if img is None:
+        return []
+
+    if img.ndim != 2:
+        # Convert to grayscale if a BGR image was passed accidentally
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    if img.dtype != np.uint8:
+        img = img.astype(np.uint8, copy=False)
+
+    out: List[QRResult] = []
+    try:
+        hits = zbar_decode(img)
+    except Exception:
+        return []
+
+    for h in hits:
+        data = h.data.decode("utf-8", errors="replace") if hasattr(h, "data") else ""
+        if not data:
+            continue
+
+        bbox = None
+        corners = None
+
+        # rect: left, top, width, height
+        if hasattr(h, "rect") and h.rect is not None:
+            bbox = (int(h.rect.left), int(h.rect.top), int(h.rect.width), int(h.rect.height))
+
+        # polygon: list of points
+        if hasattr(h, "polygon") and h.polygon:
+            pts = np.array([(p.x, p.y) for p in h.polygon], dtype=np.float32)
+            corners = pts
+            if bbox is None and len(pts) >= 4:
+                bbox = _bbox_from_corners(pts)
+
+        out.append(QRResult(payload=data, corners=corners, bbox=bbox, method="pyzbar"))
+
+    return out
 
 ```
 
@@ -1746,9 +1850,13 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from .decode import decode_multi, decode_single, QRDecodeError
+from .decode import decode_multi, decode_single, decode_pyzbar, QRDecodeError
 from .models import QRResult
 
+
+# ----------------------------
+# Ranking / selection helpers
+# ----------------------------
 
 def _bbox_area(b: Optional[Tuple[int, int, int, int]]) -> int:
     if not b:
@@ -1760,28 +1868,32 @@ def _bbox_area(b: Optional[Tuple[int, int, int, int]]) -> int:
 def _method_rank(method: str) -> int:
     """
     Lower is better.
-    We prefer multi-detection on the full image, then tile, then single.
+    We prefer:
+      - pyzbar on ROI (most robust for real-world/branded QRs)
+      - pyzbar on full image
+      - OpenCV multi/single on ROI
+      - OpenCV full image
+      - fallbacks
     """
     m = (method or "").lower()
-    if m == "multi":
+    if m.startswith("roi_pyzbar:"):
         return 0
-    if m == "tile_multi":
+    if m.startswith("pyzbar:"):
         return 1
-    if m == "tile":
+    if m.startswith("roi_multi:"):
         return 2
-    if m == "single":
+    if m.startswith("roi_single:"):
         return 3
-    return 9
+    if m == "multi":
+        return 4
+    if m == "single":
+        return 5
+    if m.startswith("fallback_"):
+        return 9
+    return 10
 
 
 def _better(a: QRResult, b: QRResult) -> QRResult:
-    """
-    Return the better of two results for the same payload.
-    Priority:
-      1) method rank
-      2) has bbox/corners
-      3) smaller bbox area (tighter localization tends to be more accurate)
-    """
     ra, rb = _method_rank(a.method), _method_rank(b.method)
     if ra != rb:
         return a if ra < rb else b
@@ -1794,14 +1906,154 @@ def _better(a: QRResult, b: QRResult) -> QRResult:
     return a if _bbox_area(a.bbox) <= _bbox_area(b.bbox) else b
 
 
+# ----------------------------
+# Cheap preprocessing (ROI only)
+# ----------------------------
+
+def _clahe(gray: np.ndarray) -> np.ndarray:
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    return clahe.apply(gray)
+
+
+def _unsharp(gray: np.ndarray) -> np.ndarray:
+    blur = cv2.GaussianBlur(gray, (0, 0), 1.0)
+    return cv2.addWeighted(gray, 1.6, blur, -0.6, 0)
+
+
+def _adaptive_thresh(gray: np.ndarray, block: int = 31, c: int = 2) -> np.ndarray:
+    block = int(block)
+    if block % 2 == 0:
+        block += 1
+    block = max(9, min(block, 101))
+    return cv2.adaptiveThreshold(
+        gray, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        block, int(c)
+    )
+
+
+def _resize(gray: np.ndarray, scale: float) -> np.ndarray:
+    h, w = gray.shape[:2]
+    nh = max(1, int(h * scale))
+    nw = max(1, int(w * scale))
+    # INTER_AREA is a good default for downscale; can “de-noise” and help zbar
+    interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC
+    return cv2.resize(gray, (nw, nh), interpolation=interp)
+
+
+# ----------------------------
+# Candidate detection (fast)
+# ----------------------------
+
+def _merge_boxes(boxes: List[Tuple[int, int, int, int]], iou_thresh: float = 0.25) -> List[Tuple[int, int, int, int]]:
+    if not boxes:
+        return []
+
+    def iou(a, b) -> float:
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        ax2, ay2 = ax + aw, ay + ah
+        bx2, by2 = bx + bw, by + bh
+
+        ix1, iy1 = max(ax, bx), max(ay, by)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+        inter = iw * ih
+        if inter <= 0:
+            return 0.0
+        union = aw * ah + bw * bh - inter
+        return float(inter) / float(max(1, union))
+
+    boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
+    keep: List[Tuple[int, int, int, int]] = []
+
+    for b in boxes:
+        merged = False
+        for i, k in enumerate(keep):
+            if iou(b, k) >= iou_thresh:
+                x1 = min(b[0], k[0])
+                y1 = min(b[1], k[1])
+                x2 = max(b[0] + b[2], k[0] + k[2])
+                y2 = max(b[1] + b[3], k[1] + k[3])
+                keep[i] = (x1, y1, x2 - x1, y2 - y1)
+                merged = True
+                break
+        if not merged:
+            keep.append(b)
+
+    return keep
+
+
+def _find_qr_candidates(gray: np.ndarray, *, max_candidates: int = 6) -> List[Tuple[int, int, int, int]]:
+    h, w = gray.shape[:2]
+    img_area = h * w
+
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blur, 80, 160)
+
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, k, iterations=1)
+
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    candidates: List[Tuple[int, int, int, int, float]] = []
+    min_area = img_area * 0.003
+    max_area = img_area * 0.60
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < min_area or area > max_area:
+            continue
+
+        x, y, bw, bh = cv2.boundingRect(cnt)
+        if bw < 80 or bh < 80:
+            continue
+
+        aspect = bw / float(bh)
+        if not (0.72 <= aspect <= 1.35):
+            continue
+
+        roi_edges = edges[y:y + bh, x:x + bw]
+        density = float(np.count_nonzero(roi_edges)) / float(max(1, roi_edges.size))
+        if density < 0.06:
+            continue
+
+        score = (bw * bh) * (0.5 + density)
+        candidates.append((x, y, bw, bh, score))
+
+    if not candidates:
+        return []
+
+    candidates.sort(key=lambda t: t[4], reverse=True)
+    boxes = [(x, y, bw, bh) for (x, y, bw, bh, _) in candidates[: max_candidates * 3]]
+    merged = _merge_boxes(boxes, iou_thresh=0.25)
+    merged = sorted(merged, key=lambda b: b[2] * b[3], reverse=True)
+    return merged[:max_candidates]
+
+
+def _pad_box(box: Tuple[int, int, int, int], *, w: int, h: int, pad_ratio: float = 0.14) -> Tuple[int, int, int, int]:
+    x, y, bw, bh = box
+    pad = int(max(bw, bh) * pad_ratio)
+    x1 = max(0, x - pad)
+    y1 = max(0, y - pad)
+    x2 = min(w, x + bw + pad)
+    y2 = min(h, y + bh + pad)
+    return x1, y1, max(1, x2 - x1), max(1, y2 - y1)
+
+
+# ----------------------------
+# Main API
+# ----------------------------
+
 def scan_qr_anywhere(image_path: str, *, max_results: int = 8) -> List[QRResult]:
     img = cv2.imread(image_path)
     if img is None:
         raise QRDecodeError(f"Image could not be read: {image_path}")
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    H, W = gray.shape[:2]
 
-    # Collect best result per payload
     best: Dict[str, QRResult] = {}
 
     def consider(r: QRResult):
@@ -1810,77 +2062,114 @@ def scan_qr_anywhere(image_path: str, *, max_results: int = 8) -> List[QRResult]
         cur = best.get(r.payload)
         best[r.payload] = r if cur is None else _better(cur, r)
 
-    # 1) Try full image first
-    for r in decode_multi(gray):
-        consider(r)
-    for r in decode_single(gray):
-        consider(r)
-
-    if best:
-        # Return best results sorted by quality, capped
+    def finalize() -> List[QRResult]:
         ordered = sorted(best.values(), key=lambda r: (_method_rank(r.method), _bbox_area(r.bbox)))
         return ordered[:max_results]
 
-    # 2) Fallback tiling for large images
-    h, w = gray.shape
-    tile = 900
-    overlap = 200
-    step = max(1, tile - overlap)
+    # ----------------------------
+    # 1) Find likely QR regions (fast)
+    # ----------------------------
+    candidates = _find_qr_candidates(gray, max_candidates=6)
 
-    for y in range(0, h, step):
-        for x in range(0, w, step):
-            crop = gray[y:y + tile, x:x + tile]
+    # If finder misses, fall back to "whole image as ROI"
+    # (Still low CPU because pyzbar attempts start with downscale)
+    if not candidates:
+        candidates = [(0, 0, W, H)]
 
-            # Prefer multi on tile first
-            tile_hits = decode_multi(crop)
-            for r in tile_hits:
+    # ----------------------------
+    # 2) Crop + decode via pyzbar (primary path)
+    # ----------------------------
+    for box in candidates:
+        x, y, bw, bh = _pad_box(box, w=W, h=H, pad_ratio=0.14)
+        roi = gray[y:y + bh, x:x + bw]
+        if roi.size == 0:
+            continue
+
+        # Minimal, high-value variant set (fast; proven for your images)
+        variants: List[Tuple[str, np.ndarray, float]] = []
+
+        # Key trick: try a small downscale first (helps 3649 in particular)
+        variants.append(("gray_s075", _resize(roi, 0.75), 0.75))
+        variants.append(("gray", roi, 1.0))
+
+        c1 = _clahe(roi)
+        variants.append(("clahe", c1, 1.0))
+
+        us = _unsharp(c1)
+        variants.append(("unsharp", us, 1.0))
+
+        th = _adaptive_thresh(us, block=31, c=2)
+        variants.append(("ath", th, 1.0))
+        variants.append(("ath_inv", cv2.bitwise_not(th), 1.0))
+
+        for tag, v, scale in variants:
+            hits = decode_pyzbar(v)
+            for r in hits:
                 mapped_bbox = None
                 mapped_corners = None
 
-                if r.bbox:
-                    bx, by, bw, bh = r.bbox
-                    mapped_bbox = (x + bx, y + by, bw, bh)
+                # Map bbox/corners from variant->ROI->full image.
+                # If we downscaled, scale coords back up.
+                sx = 1.0 / scale if scale != 1.0 else 1.0
 
-                if r.corners is not None:
-                    mapped_corners = r.corners.copy()
-                    mapped_corners[:, 0] += x
-                    mapped_corners[:, 1] += y
+                if r.bbox is not None:
+                    bx, by, rw, rh = r.bbox
+                    bx = int(bx * sx)
+                    by = int(by * sx)
+                    rw = int(rw * sx)
+                    rh = int(rh * sx)
+                    mapped_bbox = (x + bx, y + by, rw, rh)
+
+                if r.corners is not None and r.corners.size >= 2:
+                    pts = r.corners.copy()
+                    pts[:, 0] *= sx
+                    pts[:, 1] *= sx
+                    pts[:, 0] += x
+                    pts[:, 1] += y
+                    mapped_corners = pts
 
                 consider(QRResult(
                     payload=r.payload,
                     corners=mapped_corners,
                     bbox=mapped_bbox,
-                    method="tile_multi"
+                    method=f"roi_pyzbar:{tag}"
                 ))
 
-            # Then single on tile
-            tile_hits2 = decode_single(crop)
-            for r in tile_hits2:
-                mapped_bbox = None
-                mapped_corners = None
+            if best:
+                return finalize()
 
-                if r.bbox:
-                    bx, by, bw, bh = r.bbox
-                    mapped_bbox = (x + bx, y + by, bw, bh)
+    # ----------------------------
+    # 3) Fallback: OpenCV QRCodeDetector (secondary)
+    # ----------------------------
+    det = cv2.QRCodeDetector()
 
-                if r.corners is not None:
-                    mapped_corners = r.corners.copy()
-                    mapped_corners[:, 0] += x
-                    mapped_corners[:, 1] += y
+    # Full image once
+    for r in decode_multi(gray, det=det):
+        consider(r)
+    for r in decode_single(gray, det=det):
+        consider(r)
 
-                consider(QRResult(
-                    payload=r.payload,
-                    corners=mapped_corners,
-                    bbox=mapped_bbox,
-                    method="tile"
-                ))
+    if best:
+        return finalize()
 
-            if len(best) >= max_results:
-                ordered = sorted(best.values(), key=lambda r: (_method_rank(r.method), _bbox_area(r.bbox)))
-                return ordered[:max_results]
+    # ROI attempt (very bounded)
+    for box in candidates[:3]:
+        x, y, bw, bh = _pad_box(box, w=W, h=H, pad_ratio=0.14)
+        roi = gray[y:y + bh, x:x + bw]
+        if roi.size == 0:
+            continue
 
-    ordered = sorted(best.values(), key=lambda r: (_method_rank(r.method), _bbox_area(r.bbox)))
-    return ordered[:max_results]
+        # tiny set
+        for tag, v in [("gray", roi), ("clahe", _clahe(roi))]:
+            for r in decode_multi(v, det=det):
+                consider(QRResult(payload=r.payload, corners=None, bbox=None, method=f"roi_multi:{tag}"))
+            for r in decode_single(v, det=det):
+                consider(QRResult(payload=r.payload, corners=None, bbox=None, method=f"roi_single:{tag}"))
+
+        if best:
+            return finalize()
+
+    return finalize()
 
 
 def decode_first(image_path: str) -> str:
@@ -1888,6 +2177,15 @@ def decode_first(image_path: str) -> str:
     if not hits:
         raise QRDecodeError("No QR code found.")
     return hits[0].payload
+
+```
+
+## `src/qrpypass/service/__init__.py`
+
+```python
+from .app import create_app
+
+__all__ = ["create_app"]
 
 ```
 
@@ -6371,8 +6669,8 @@ if __name__ == "__main__":
 
 ```
 📁 dist/
-    📄 qrpypass-0.2.0-py3-none-any.whl
-    📄 qrpypass-0.2.0.tar.gz
+    📄 qrpypass-0.2.2-py3-none-any.whl
+    📄 qrpypass-0.2.2.tar.gz
 📁 images/
     📄 qr-logo.png
     📄 qr.png
@@ -6417,6 +6715,7 @@ if __name__ == "__main__":
                 📄 login.html
                 📄 register.html
                 📄 vault.html
+            📄 __init__.py
             📄 app.py
             📄 db.py
             📄 project.md
