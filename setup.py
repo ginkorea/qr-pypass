@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="qrpypass",
-    version="0.1.3",
+    version="0.2.0",
     description="Headless QR decoder + TOTP authenticator Flask mini-service",
     author="Josh Gompert",
     author_email="",

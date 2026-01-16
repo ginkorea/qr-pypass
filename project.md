@@ -1,21 +1,20 @@
-# Project Compilation: mysite
+# Project Compilation: qr-pypass
 
 ## 🧾 Summary
 
 | Metric | Value |
 |:--|:--|
-| Root Directory | `/home/gompert/mysite` |
+| Root Directory | `/home/gompert/data/workspace/qr-pypass` |
 | Total Directories | 15 |
-| Total Indexed Files | 43 |
+| Total Indexed Files | 46 |
 | Skipped Files | 12 |
-| Indexed Size | 146.72 KB |
+| Indexed Size | 186.10 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
 
 - [README.md](#readme-md)
-- [_data/app.db](#data-app-db)
-- [dist/qrpypass-0.1.2-py3-none-any.whl](#dist-qrpypass-0-1-2-py3-none-any-whl)
+- [dist/qrpypass-0.2.0-py3-none-any.whl](#dist-qrpypass-0-2-0-py3-none-any-whl)
 - [gitignore](#gitignore)
 - [pyproject.toml](#pyproject-toml)
 - [requirements.txt](#requirements-txt)
@@ -44,10 +43,12 @@
 - [src/qrpypass/qr/scan.py](#src-qrpypass-qr-scan-py)
 - [src/qrpypass/service/app.py](#src-qrpypass-service-app-py)
 - [src/qrpypass/service/db.py](#src-qrpypass-service-db-py)
+- [src/qrpypass/service/project.md](#src-qrpypass-service-project-md)
 - [src/qrpypass/service/run.py](#src-qrpypass-service-run-py)
 - [src/qrpypass/service/static/app.js](#src-qrpypass-service-static-app-js)
 - [src/qrpypass/service/static/gen.js](#src-qrpypass-service-static-gen-js)
 - [src/qrpypass/service/static/style.css](#src-qrpypass-service-static-style-css)
+- [src/qrpypass/service/templates/debug.html](#src-qrpypass-service-templates-debug-html)
 - [src/qrpypass/service/templates/gen.html](#src-qrpypass-service-templates-gen-html)
 - [src/qrpypass/service/templates/index.html](#src-qrpypass-service-templates-index-html)
 - [src/qrpypass/service/templates/login.html](#src-qrpypass-service-templates-login-html)
@@ -56,15 +57,15 @@
 - [test/api-test.py](#test-api-test-py)
 - [test/full_api_smoke.py](#test-full-api-smoke-py)
 - [test/test_totp_verify_flow.py](#test-test-totp-verify-flow-py)
+- [tools/update_favicons_and_html.py](#tools-update-favicons-and-html-py)
+- [update_favicons_and_html.py](#update-favicons-and-html-py)
 
 ## 📂 Project Structure
 
 ```
-📁 _data/
-    📄 app.db
 📁 dist/
-    📄 qrpypass-0.1.2-py3-none-any.whl
-    📄 qrpypass-0.1.2.tar.gz
+    📄 qrpypass-0.2.0-py3-none-any.whl
+    📄 qrpypass-0.2.0.tar.gz
 📁 images/
     📄 qr-logo.png
     📄 qr.png
@@ -103,6 +104,7 @@
                 📄 icon-512.png
                 📄 style.css
             📁 templates/
+                📄 debug.html
                 📄 gen.html
                 📄 index.html
                 📄 login.html
@@ -110,6 +112,7 @@
                 📄 vault.html
             📄 app.py
             📄 db.py
+            📄 project.md
             📄 run.py
         📄 __init__.py
     📁 qrpypass.egg-info/
@@ -125,11 +128,15 @@
     📄 api-test.py
     📄 full_api_smoke.py
     📄 test_totp_verify_flow.py
+📁 tools/
+    📄 update_favicons_and_html.py
 📄 gitignore
+📄 project.md
 📄 pyproject.toml
 📄 README.md
 📄 requirements.txt
 📄 setup.py
+📄 update_favicons_and_html.py
 ```
 
 ## `README.md`
@@ -456,7 +463,7 @@ logs/
 ```toml
 [project]
 name = "qrpypass"
-version = "0.1.2"
+version = "0.2.0"
 description = "Headless QR decoder + TOTP authenticator Flask mini-service"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -495,7 +502,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="qrpypass",
-    version="0.1.2",
+    version="0.2.0",
     description="Headless QR decoder + TOTP authenticator Flask mini-service",
     author="Josh Gompert",
     author_email="",
@@ -518,7 +525,7 @@ setup(
 ```text
 Metadata-Version: 2.4
 Name: qrpypass
-Version: 0.1.2
+Version: 0.2.0
 Summary: Headless QR decoder + TOTP authenticator Flask mini-service
 Author: Josh Gompert
 Author-email: 
@@ -1902,6 +1909,684 @@ from PIL import Image
 
 from qrpypass.qr import scan_and_classify
 from qrpypass.generate import generate_payload
+from qrpypass.auth import (
+    parse_otpauth_uri,
+    totp_now,
+    totp_verify,
+    OTPAuthError,
+)
+
+from .db import (
+    init_db,
+    authenticate,
+    create_user,
+    get_user_by_id,
+    upsert_totp_account,
+    list_totp_accounts,
+    get_totp_account,
+    delete_totp_account,
+)
+
+
+def create_app() -> Flask:
+    here = os.path.dirname(__file__)
+    templates_dir = os.path.join(here, "templates")
+    static_dir = os.path.join(here, "static")
+
+    app = Flask(
+        __name__,
+        template_folder=templates_dir,
+        static_folder=static_dir,
+        static_url_path="/static",
+    )
+
+    # Required for sessions (set in env on PythonAnywhere / WSGI)
+    app.secret_key = os.environ.get("QRPYPASS_SECRET_KEY", "dev-unsafe-change-me")
+
+    # Upload size limit (e.g. 6 MB)
+    app.config["MAX_CONTENT_LENGTH"] = int(
+        os.environ.get("QRPYPASS_MAX_UPLOAD_BYTES", str(6 * 1024 * 1024))
+    )
+
+    # Rate limiting
+    limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
+
+    # DB init
+    init_db()
+
+    # Login setup
+    login_mgr = LoginManager()
+    login_mgr.login_view = "login"
+    login_mgr.init_app(app)
+
+    @login_mgr.user_loader
+    def load_user(user_id: str):
+        try:
+            return get_user_by_id(int(user_id))
+        except Exception:
+            return None
+
+    @app.get("/login")
+    def login():
+        return render_template("login.html")
+
+    @app.post("/login")
+    @limiter.limit("10 per minute")
+    def login_post():
+        email = (request.form.get("email") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        u = authenticate(email, password)
+        if not u:
+            return render_template("login.html", error="Invalid email/password"), 401
+        login_user(u)
+        return redirect(url_for("vault"))
+
+    @app.get("/register")
+    def register():
+        return render_template("register.html")
+
+    @app.post("/register")
+    @limiter.limit("5 per minute")
+    def register_post():
+        email = (request.form.get("email") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        try:
+            u = create_user(email, password)
+        except Exception as e:
+            return render_template("register.html", error=str(e)), 400
+        login_user(u)
+        return redirect(url_for("vault"))
+
+    @app.get("/logout")
+    @login_required
+    def logout():
+        logout_user()
+        return redirect(url_for("login"))
+
+    @app.get("/")
+    @login_required
+    def index():
+        return render_template("index.html")
+
+    @app.get("/vault")
+    @login_required
+    def vault():
+        return render_template("vault.html")
+
+    @app.get("/gen")
+    @login_required
+    def gen_page():
+        return render_template("gen.html")
+
+    @app.get("/health")
+    def health():
+        return jsonify({"ok": True})
+
+    # ---------- helpers ----------
+    def _reject_huge_images(path: str) -> None:
+        # Prevent decompression bomb / giant images
+        with Image.open(path) as im:
+            w, h = im.size
+            max_dim = int(os.environ.get("QRPYPASS_MAX_IMAGE_DIM", "6000"))
+            if w > max_dim or h > max_dim:
+                raise ValueError(f"Image too large ({w}x{h}); max dimension is {max_dim}")
+
+    # ---------- SCAN ----------
+    @app.post("/scan")
+    @login_required
+    @limiter.limit("30 per minute")
+    def scan():
+        if "file" not in request.files:
+            return jsonify({"error": "missing form file field 'file'"}), 400
+
+        f = request.files["file"]
+        if not f.filename:
+            return jsonify({"error": "empty filename"}), 400
+
+        max_results = request.form.get("max_results", "8")
+        try:
+            max_results_i = int(max_results)
+            if not (1 <= max_results_i <= 50):
+                return jsonify({"error": "max_results must be between 1 and 50"}), 400
+        except ValueError:
+            return jsonify({"error": "max_results must be an integer"}), 400
+
+        suffix = os.path.splitext(f.filename)[1].lower() or ".img"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp_path = tmp.name
+            f.save(tmp_path)
+
+        try:
+            _reject_huge_images(tmp_path)
+            hits = scan_and_classify(tmp_path, max_results=max_results_i)
+            return jsonify({"count": len(hits), "results": [h.to_dict() for h in hits]})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+    # ---------- AUTH ----------
+    @app.get("/auth/list")
+    @login_required
+    @limiter.limit("120 per minute")
+    def auth_list():
+        accounts = list_totp_accounts(current_user.id)
+        return jsonify({"count": len(accounts), "accounts": accounts})
+
+    @app.post("/auth/import")
+    @login_required
+    @limiter.limit("20 per minute")
+    def auth_import():
+        data = request.get_json(silent=True) or {}
+        uri = (data.get("otpauth_uri") or "").strip()
+        if not uri:
+            return jsonify({"error": "Missing otpauth_uri"}), 400
+
+        try:
+            acc = parse_otpauth_uri(uri)
+        except OTPAuthError as e:
+            return jsonify({"error": str(e)}), 400
+
+        upsert_totp_account(
+            user_id=current_user.id,
+            acc_id=acc.id,
+            name=acc.name,
+            issuer=acc.issuer,
+            secret_b32=acc.secret_b32,
+            algorithm=acc.algorithm,
+            digits=acc.digits,
+            period=acc.period,
+        )
+        return jsonify({"imported": acc.safe_dict()})
+
+    @app.post("/auth/delete")
+    @login_required
+    @limiter.limit("60 per minute")
+    def auth_delete():
+        data = request.get_json(silent=True) or {}
+        acc_id = (data.get("id") or "").strip()
+        if not acc_id:
+            return jsonify({"error": "Missing id"}), 400
+
+        ok = delete_totp_account(current_user.id, acc_id)
+        if not ok:
+            return jsonify({"error": "Unknown id"}), 404
+
+        return jsonify({"deleted": acc_id})
+
+    @app.get("/auth/code")
+    @login_required
+    @limiter.limit("240 per minute")
+    def auth_code():
+        acc_id = (request.args.get("id") or "").strip()
+        if not acc_id:
+            return jsonify({"error": "Missing id"}), 400
+
+        row = get_totp_account(current_user.id, acc_id)
+        if not row:
+            return jsonify({"error": "Unknown id"}), 404
+
+        # Build a transient OTPAuthAccount for totp_now
+        from qrpypass.auth.models import OTPAuthAccount
+
+        acc = OTPAuthAccount(
+            id=row["id"],
+            name=row["name"],
+            issuer=row["issuer"],
+            secret_b32=row["secret_b32"],
+            algorithm=row["algorithm"],
+            digits=row["digits"],
+            period=row["period"],
+        )
+        code, remaining = totp_now(acc)
+        return jsonify({"account": acc.safe_dict(), "code": code, "seconds_remaining": remaining})
+
+    @app.post("/auth/verify")
+    @login_required
+    @limiter.limit("60 per minute")
+    def auth_verify():
+        data = request.get_json(silent=True) or {}
+        acc_id = (data.get("id") or "").strip()
+        code = (data.get("code") or "").strip()
+
+        try:
+            window = int(data.get("window", 1))
+        except Exception:
+            return jsonify({"error": "window must be an integer"}), 400
+
+        if not acc_id:
+            return jsonify({"error": "Missing id"}), 400
+        if not code:
+            return jsonify({"error": "Missing code"}), 400
+
+        row = get_totp_account(current_user.id, acc_id)
+        if not row:
+            return jsonify({"error": "Unknown id"}), 404
+
+        from qrpypass.auth.models import OTPAuthAccount
+
+        acc = OTPAuthAccount(
+            id=row["id"],
+            name=row["name"],
+            issuer=row["issuer"],
+            secret_b32=row["secret_b32"],
+            algorithm=row["algorithm"],
+            digits=row["digits"],
+            period=row["period"],
+        )
+
+        try:
+            ok, offset = totp_verify(acc, code, window=window)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
+        return jsonify({"ok": ok, "matched_offset": offset, "account": acc.safe_dict()})
+
+    # ---------- GENERATE ----------
+    @app.post("/gen/payload")
+    @login_required
+    @limiter.limit("60 per minute")
+    def gen_payload_api():
+        data = request.get_json(silent=True) or {}
+        kind = (data.get("kind") or "").strip()
+        params = data.get("params", {}) or {}
+        do_import = bool(data.get("import", False))
+
+        try:
+            gp = generate_payload(kind, params)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
+        imported = None
+        if do_import and gp.kind.value == "otpauth_totp":
+            try:
+                acc = parse_otpauth_uri(gp.payload)
+                upsert_totp_account(
+                    user_id=current_user.id,
+                    acc_id=acc.id,
+                    name=acc.name,
+                    issuer=acc.issuer,
+                    secret_b32=acc.secret_b32,
+                    algorithm=acc.algorithm,
+                    digits=acc.digits,
+                    period=acc.period,
+                )
+                imported = acc.safe_dict()
+            except OTPAuthError as e:
+                return jsonify({"error": str(e)}), 400
+
+        return jsonify({"generated": gp.to_dict(), "imported": imported})
+
+    @app.post("/gen/qr")
+    @login_required
+    @limiter.limit("120 per minute")
+    def gen_qr():
+        data = request.get_json(silent=True) or {}
+        payload = (data.get("payload") or "").strip()
+        if not payload:
+            return jsonify({"error": "payload is required"}), 400
+
+        try:
+            box_size = int(data.get("box_size", 8))
+            border = int(data.get("border", 2))
+        except ValueError:
+            return jsonify({"error": "box_size and border must be integers"}), 400
+
+        if not (2 <= box_size <= 20):
+            return jsonify({"error": "box_size must be between 2 and 20"}), 400
+        if not (0 <= border <= 10):
+            return jsonify({"error": "border must be between 0 and 10"}), 400
+
+        qr = qrcode.QRCode(box_size=box_size, border=border)
+        qr.add_data(payload)
+        qr.make(fit=True)
+
+        img = qr.make_image()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return send_file(buf, mimetype="image/png")
+
+    return app
+
+```
+
+## `src/qrpypass/service/db.py`
+
+```python
+from __future__ import annotations
+
+import os
+import sqlite3
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+from cryptography.fernet import Fernet
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
+def data_dir() -> Path:
+    base = Path(os.environ.get("QRPYPASS_DATA_DIR", Path.home() / ".qrpypass"))
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def db_path() -> Path:
+    return data_dir() / "app.db"
+
+
+def master_fernet() -> Fernet:
+    """
+    Return a Fernet instance for encrypting secrets at rest.
+
+    Priority:
+      1) QRPYPASS_MASTER_KEY (if valid)
+      2) persisted key file in QRPYPASS_DATA_DIR/_master.key
+      3) generate a new key and persist it (first run)
+
+    This keeps a stable key across reloads without relying on WSGI env.
+    """
+    # 1) Try env var first (optional override)
+    env_key = os.environ.get("QRPYPASS_MASTER_KEY", "").strip()
+    if env_key:
+        try:
+            return Fernet(env_key.encode("utf-8"))
+        except Exception as e:
+            raise RuntimeError(
+                "Invalid QRPYPASS_MASTER_KEY. Must be a Fernet key generated by Fernet.generate_key()."
+            ) from e
+
+    # 2) Persisted key in data dir
+    key_path = data_dir() / "_master.key"
+    if key_path.exists():
+        key = key_path.read_text(encoding="utf-8").strip()
+        try:
+            return Fernet(key.encode("utf-8"))
+        except Exception as e:
+            raise RuntimeError(
+                f"Invalid persisted master key at {key_path}. Delete it to regenerate, "
+                "or set a valid QRPYPASS_MASTER_KEY env var."
+            ) from e
+
+    # 3) First run: generate + persist with restrictive permissions
+    key = Fernet.generate_key().decode("utf-8")
+
+    # Write atomically, then chmod
+    tmp = key_path.with_suffix(".tmp")
+    tmp.write_text(key + "\n", encoding="utf-8")
+    os.replace(tmp, key_path)
+
+    try:
+        os.chmod(key_path, 0o600)
+    except Exception:
+        # On some platforms/filesystems this may fail; best effort.
+        pass
+
+    return Fernet(key.encode("utf-8"))
+
+
+def connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(db_path()))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    with connect() as c:
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            pw_hash TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+        """)
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS totp_accounts (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            issuer TEXT,
+            secret_enc BLOB NOT NULL,
+            algorithm TEXT NOT NULL,
+            digits INTEGER NOT NULL,
+            period INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(user_id, id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """)
+
+
+@dataclass
+class User:
+    id: int
+    email: str
+
+    # Flask-Login interface
+    @property
+    def is_authenticated(self) -> bool:  # pragma: no cover
+        return True
+
+    @property
+    def is_active(self) -> bool:  # pragma: no cover
+        return True
+
+    @property
+    def is_anonymous(self) -> bool:  # pragma: no cover
+        return False
+
+    def get_id(self) -> str:  # pragma: no cover
+        return str(self.id)
+
+
+def create_user(email: str, password: str) -> User:
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        raise ValueError("Invalid email")
+    if not password or len(password) < 10:
+        raise ValueError("Password must be at least 10 characters")
+
+    pw_hash = generate_password_hash(password)
+    now = int(time.time())
+
+    with connect() as c:
+        try:
+            cur = c.execute(
+                "INSERT INTO users (email, pw_hash, created_at) VALUES (?, ?, ?)",
+                (email, pw_hash, now),
+            )
+        except sqlite3.IntegrityError:
+            raise ValueError("Email already registered")
+        uid = int(cur.lastrowid)
+    return User(id=uid, email=email)
+
+
+def get_user_by_email(email: str) -> Optional[sqlite3.Row]:
+    with connect() as c:
+        r = c.execute("SELECT * FROM users WHERE email = ?", (email.strip().lower(),)).fetchone()
+        return r
+
+
+def get_user_by_id(user_id: int) -> Optional[User]:
+    with connect() as c:
+        r = c.execute("SELECT id, email FROM users WHERE id = ?", (int(user_id),)).fetchone()
+        if not r:
+            return None
+        return User(id=int(r["id"]), email=str(r["email"]))
+
+
+def authenticate(email: str, password: str) -> Optional[User]:
+    r = get_user_by_email(email)
+    if not r:
+        return None
+    if not check_password_hash(r["pw_hash"], password):
+        return None
+    return User(id=int(r["id"]), email=str(r["email"]))
+
+
+def upsert_totp_account(
+    *,
+    user_id: int,
+    acc_id: str,
+    name: str,
+    issuer: Optional[str],
+    secret_b32: str,
+    algorithm: str,
+    digits: int,
+    period: int,
+) -> None:
+    f = master_fernet()
+    secret_enc = f.encrypt(secret_b32.encode("utf-8"))
+    now = int(time.time())
+
+    with connect() as c:
+        c.execute(
+            """
+            INSERT INTO totp_accounts
+              (id, user_id, name, issuer, secret_enc, algorithm, digits, period, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              user_id=excluded.user_id,
+              name=excluded.name,
+              issuer=excluded.issuer,
+              secret_enc=excluded.secret_enc,
+              algorithm=excluded.algorithm,
+              digits=excluded.digits,
+              period=excluded.period
+            """,
+            (acc_id, int(user_id), name, issuer, secret_enc, algorithm, int(digits), int(period), now),
+        )
+
+
+def list_totp_accounts(user_id: int) -> List[Dict[str, Any]]:
+    with connect() as c:
+        rows = c.execute(
+            "SELECT id, name, issuer, algorithm, digits, period, created_at FROM totp_accounts WHERE user_id = ? ORDER BY created_at DESC",
+            (int(user_id),),
+        ).fetchall()
+
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "issuer": r["issuer"],
+                "algorithm": r["algorithm"],
+                "digits": int(r["digits"]),
+                "period": int(r["period"]),
+                "created_at": int(r["created_at"]),
+            }
+        )
+    return out
+
+
+def get_totp_account(user_id: int, acc_id: str) -> Optional[Dict[str, Any]]:
+    with connect() as c:
+        r = c.execute(
+            "SELECT * FROM totp_accounts WHERE user_id = ? AND id = ?",
+            (int(user_id), acc_id),
+        ).fetchone()
+        if not r:
+            return None
+
+    f = master_fernet()
+    secret_b32 = f.decrypt(r["secret_enc"]).decode("utf-8")
+
+    return {
+        "id": r["id"],
+        "name": r["name"],
+        "issuer": r["issuer"],
+        "secret_b32": secret_b32,
+        "algorithm": r["algorithm"],
+        "digits": int(r["digits"]),
+        "period": int(r["period"]),
+    }
+
+def delete_totp_account(user_id: int, acc_id: str) -> bool:
+    with connect() as c:
+        cur = c.execute(
+            "DELETE FROM totp_accounts WHERE user_id = ? AND id = ?",
+            (int(user_id), acc_id),
+        )
+        return cur.rowcount > 0
+
+
+```
+
+## `src/qrpypass/service/project.md`
+
+```markdown
+# Project Compilation: service
+
+## 🧾 Summary
+
+| Metric | Value |
+|:--|:--|
+| Root Directory | `/home/gompert/data/workspace/qr-pypass/src/qrpypass/service` |
+| Total Directories | 2 |
+| Total Indexed Files | 11 |
+| Skipped Files | 1 |
+| Indexed Size | 45.69 KB |
+| Max File Size Limit | 2 MB |
+
+## 📚 Table of Contents
+
+- [app.py](#app-py)
+- [db.py](#db-py)
+- [run.py](#run-py)
+- [static/app.js](#static-app-js)
+- [static/gen.js](#static-gen-js)
+- [static/style.css](#static-style-css)
+- [templates/gen.html](#templates-gen-html)
+- [templates/index.html](#templates-index-html)
+- [templates/login.html](#templates-login-html)
+- [templates/register.html](#templates-register-html)
+- [templates/vault.html](#templates-vault-html)
+
+## 📂 Project Structure
+
+```
+📁 static/
+    📄 app.js
+    📄 gen.js
+    📄 icon-512.png
+    📄 style.css
+📁 templates/
+    📄 gen.html
+    📄 index.html
+    📄 login.html
+    📄 register.html
+    📄 vault.html
+📄 app.py
+📄 db.py
+📄 run.py
+```
+
+## `app.py`
+
+```python
+from __future__ import annotations
+
+import io
+import os
+import tempfile
+
+import qrcode
+from flask import Flask, jsonify, request, render_template, send_file, redirect, url_for
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from PIL import Image
+
+from qrpypass.qr import scan_and_classify
+from qrpypass.generate import generate_payload
 
 from qrpypass.auth import (
     parse_otpauth_uri,
@@ -2220,7 +2905,7 @@ def create_app() -> Flask:
 
 ```
 
-## `src/qrpypass/service/db.py`
+## `db.py`
 
 ```python
 from __future__ import annotations
@@ -2435,7 +3120,7 @@ def get_totp_account(user_id: int, acc_id: str) -> Optional[Dict[str, Any]]:
 
 ```
 
-## `src/qrpypass/service/run.py`
+## `run.py`
 
 ```python
 from __future__ import annotations
@@ -2453,7 +3138,7 @@ if __name__ == "__main__":
 
 ```
 
-## `src/qrpypass/service/static/app.js`
+## `static/app.js`
 
 ```javascript
 const form = document.getElementById("uploadForm");
@@ -2629,6 +3314,1122 @@ form.addEventListener("submit", async (e) => {
   try {
     const resp = await fetch("/scan", { method: "POST", body: fd });
     const data = await resp.json();
+
+    if (!resp.ok) {
+      statusEl.textContent = "Error: " + (data.error || resp.statusText);
+      return;
+    }
+
+    statusEl.textContent = `Found ${data.count} result(s).`;
+
+    if (!data.results || data.results.length === 0) {
+      resultsEl.innerHTML = `<div class="card"><b>No QR codes decoded.</b></div>`;
+      return;
+    }
+
+    data.results.forEach((item, idx) => {
+      const cls = item.classification || {};
+      const qr = item.qr || {};
+      const bbox = (qr.bbox) ? JSON.stringify(qr.bbox) : "null";
+
+      // Special handling for otpauth: import + live code
+      if (cls.kind === "otpauth" && cls.raw) {
+        renderOtpAuthCard({ idx, rawUri: cls.raw });
+        return;
+      }
+
+      // Default card behavior (URL/TEXT/etc.)
+      let extra = "";
+      if (cls.kind === "url" && cls.normalized_url) {
+        const u = escapeHtml(cls.normalized_url);
+        extra = `<div><b>Open:</b> <a href="${u}" target="_blank" rel="noreferrer">${u}</a></div>`;
+      }
+
+      resultsEl.insertAdjacentHTML("beforeend", `
+        <div class="card">
+          <div><b>#${idx + 1}</b></div>
+          <div><b>kind:</b> ${escapeHtml(cls.kind || "unknown")}</div>
+          <div><b>method:</b> ${escapeHtml(qr.method || "unknown")}</div>
+          <div><b>bbox:</b> <span class="muted">${escapeHtml(bbox)}</span></div>
+          ${extra}
+          <div style="margin-top:10px;"><b>raw payload</b></div>
+          <pre>${escapeHtml(cls.raw || "")}</pre>
+        </div>
+      `);
+    });
+
+  } catch (err) {
+    statusEl.textContent = "Error: " + err;
+  }
+});
+
+```
+
+## `static/gen.js`
+
+```javascript
+// src/qrpypass/service/static/gen.js
+(() => {
+  const kindEl = document.getElementById("kind");
+  const fieldsEl = document.getElementById("fields");
+  const statusEl = document.getElementById("status");
+  const outEl = document.getElementById("out");
+  const btnGen = document.getElementById("btnGen");
+  const importEl = document.getElementById("doImport");
+
+  // Optional: recent UI removed this input, so it may be null.
+  const passEl = document.getElementById("passphrase");
+
+  // Track last blob URL so we can revoke it (avoid leaking memory)
+  let lastObjUrl = null;
+
+  function esc(s) {
+    return String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  function fieldRow(html) {
+    return `<div class="row" style="margin-top:10px;">${html}</div>`;
+  }
+
+  function renderFields() {
+    const k = kindEl.value;
+
+    if (k === "url") {
+      fieldsEl.innerHTML = fieldRow(`
+        <input id="url" style="flex:1" placeholder="https://example.com" />
+      `);
+      return;
+    }
+
+    if (k === "text") {
+      fieldsEl.innerHTML = `
+        <textarea id="text" rows="4" style="width:100%; padding:10px;" placeholder="Any text payload."></textarea>
+      `;
+      return;
+    }
+
+    // totp (otpauth)
+    fieldsEl.innerHTML = `
+      ${fieldRow(`
+        <input id="issuer" placeholder="issuer (e.g. ACME)" />
+        <input id="account_name" placeholder="account (e.g. alice@example.com)" style="min-width:280px;" />
+      `)}
+      ${fieldRow(`
+        <label>digits <input id="digits" type="number" min="6" max="8" value="6" /></label>
+        <label>period <input id="period" type="number" min="5" max="300" value="30" /></label>
+        <label>algorithm
+          <select id="algorithm">
+            <option value="SHA1">SHA1</option>
+            <option value="SHA256">SHA256</option>
+            <option value="SHA512">SHA512</option>
+          </select>
+        </label>
+        <label>nbytes <input id="nbytes" type="number" min="10" max="64" value="20" /></label>
+      `)}
+      <div class="muted" style="margin-top:8px;">
+        Secret is generated server-side unless you extend the UI to supply one.
+      </div>
+    `;
+  }
+
+  async function postJson(url, body) {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data: d };
+  }
+
+  function clearOldPreviewUrl() {
+    if (lastObjUrl) {
+      try {
+        URL.revokeObjectURL(lastObjUrl);
+      } catch (_) {}
+      lastObjUrl = null;
+    }
+  }
+
+  function buildParams(kind) {
+    const params = {};
+
+    if (kind === "url") {
+      params.url = (document.getElementById("url")?.value || "").trim();
+      return params;
+    }
+
+    if (kind === "text") {
+      params.text = (document.getElementById("text")?.value || "").trim();
+      return params;
+    }
+
+    // totp
+    params.issuer = (document.getElementById("issuer")?.value || "").trim();
+    params.account_name = (document.getElementById("account_name")?.value || "").trim();
+    params.digits = Number(document.getElementById("digits")?.value || 6);
+    params.period = Number(document.getElementById("period")?.value || 30);
+    params.algorithm = (document.getElementById("algorithm")?.value || "SHA1").trim();
+    params.nbytes = Number(document.getElementById("nbytes")?.value || 20);
+    return params;
+  }
+
+  function suggestFilename(kind) {
+    const ts = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
+    if (kind === "url") return `qr-url-${ts}.png`;
+    if (kind === "text") return `qr-text-${ts}.png`;
+    return `qr-totp-${ts}.png`;
+  }
+
+  btnGen.addEventListener("click", async () => {
+    outEl.innerHTML = "";
+    statusEl.textContent = "Generating...";
+    clearOldPreviewUrl();
+
+    try {
+      const k = kindEl.value;
+      const params = buildParams(k);
+
+      // Optional passphrase (safe if input removed)
+      const passphrase = passEl ? (passEl.value || "").trim() : "";
+      const doImport = !!(importEl && importEl.checked);
+
+      // 1) Generate payload
+      const res = await postJson("/gen/payload", {
+        kind: k,
+        params,
+        import: doImport,
+        passphrase: passphrase || null,
+      });
+
+      if (!res.ok) {
+        statusEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
+        return;
+      }
+
+      const gen = res.data.generated || {};
+      const payload = gen.payload || "";
+
+      // 2) Render QR png from payload
+      const qrResp = await fetch("/gen/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload, box_size: 8, border: 2 }),
+      });
+
+      let previewHtml = "";
+      if (qrResp.ok) {
+        const blob = await qrResp.blob();
+        const objUrl = URL.createObjectURL(blob);
+        lastObjUrl = objUrl;
+
+        const filename = suggestFilename(k);
+
+        previewHtml = `
+          <div class="card">
+            <div class="row" style="justify-content:space-between; align-items:center;">
+              <div><b>QR preview</b></div>
+              <a class="btn" href="${objUrl}" download="${esc(filename)}">Download PNG</a>
+            </div>
+            <div style="margin-top:10px;">
+              <img src="${objUrl}" alt="qr" style="max-width:360px; width:100%; height:auto; border-radius:10px;" />
+            </div>
+          </div>
+        `;
+      } else {
+        // Attempt to surface server error text if any
+        let msg = "";
+        try {
+          msg = await qrResp.text();
+        } catch (_) {}
+        previewHtml = `
+          <div class="card">
+            <b>QR render failed</b>
+            <div class="muted">HTTP ${qrResp.status}${msg ? " :: " + esc(msg.slice(0, 300)) : ""}</div>
+          </div>
+        `;
+      }
+
+      // 3) Show details
+      const metaJson = esc(JSON.stringify(gen.meta || {}, null, 2));
+      const payloadEsc = esc(payload);
+
+      statusEl.textContent = "Generated.";
+
+      outEl.innerHTML = `
+        ${previewHtml}
+        <div class="card">
+          <div><b>kind:</b> ${esc(gen.kind || "")}</div>
+
+          <div style="margin-top:10px;" class="row">
+            <button type="button" id="btnCopyPayload">Copy payload</button>
+            ${res.data.imported && res.data.imported.id
+              ? `<span class="muted">Imported id: ${esc(res.data.imported.id)}</span>`
+              : `<span class="muted">${doImport ? "Import requested (no id returned)." : ""}</span>`}
+          </div>
+
+          <div style="margin-top:10px;"><b>payload</b></div>
+          <pre id="payloadPre">${payloadEsc}</pre>
+
+          <div style="margin-top:10px;"><b>meta</b></div>
+          <pre>${metaJson}</pre>
+        </div>
+      `;
+
+      // Copy button handler
+      const btnCopy = document.getElementById("btnCopyPayload");
+      if (btnCopy) {
+        btnCopy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(payload);
+            btnCopy.textContent = "Copied";
+            setTimeout(() => (btnCopy.textContent = "Copy payload"), 900);
+          } catch (e) {
+            btnCopy.textContent = "Copy failed";
+            setTimeout(() => (btnCopy.textContent = "Copy payload"), 1200);
+          }
+        });
+      }
+    } catch (err) {
+      statusEl.textContent = "Error: " + (err?.message || String(err));
+    }
+  });
+
+  kindEl.addEventListener("change", renderFields);
+  renderFields();
+})();
+
+```
+
+## `static/style.css`
+
+```css
+/* Modern dark theme (no framework) */
+:root{
+  color-scheme: dark;
+
+  --bg: #0b0f17;
+  --panel: rgba(255,255,255,0.06);
+  --panel-2: rgba(255,255,255,0.04);
+  --border: rgba(255,255,255,0.12);
+  --border-2: rgba(255,255,255,0.08);
+  --text: rgba(255,255,255,0.92);
+  --muted: rgba(255,255,255,0.62);
+  --accent: rgba(120, 180, 255, 0.95);
+  --danger: rgba(255, 120, 140, 0.95);
+
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+*{ box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body{
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background:
+    radial-gradient(1000px 700px at 10% 0%, rgba(120,180,255,0.18), transparent 55%),
+    radial-gradient(900px 600px at 90% 10%, rgba(255,120,140,0.10), transparent 55%),
+    var(--bg);
+  color: var(--text);
+}
+
+.container{
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 18px 20px 48px;
+}
+
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(12px);
+  background: linear-gradient(to bottom, rgba(11,15,23,0.86), rgba(11,15,23,0.65));
+  border-bottom: 1px solid var(--border-2);
+  padding: 14px 20px;
+}
+
+.topbar .brand{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo{
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  background: linear-gradient(135deg, rgba(120,180,255,0.35), rgba(255,120,140,0.25));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.title{
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.subtitle{
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.nav{
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.navlink{
+  text-decoration: none;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.navlink:hover{
+  color: var(--text);
+  border-color: var(--border-2);
+  background: rgba(255,255,255,0.03);
+}
+
+.navlink.active{
+  color: var(--text);
+  border-color: var(--border);
+  background: rgba(255,255,255,0.05);
+}
+
+.navlink.danger{
+  color: rgba(255,255,255,0.86);
+}
+.navlink.danger:hover{
+  border-color: rgba(255,120,140,0.35);
+  background: rgba(255,120,140,0.12);
+}
+
+h1{
+  margin: 0;
+  font-size: 18px;
+}
+
+.row{
+  display:flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.card{
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  margin-top: 16px;
+}
+
+.card.subtle{
+  background: var(--panel-2);
+  box-shadow: none;
+}
+
+.muted{ color: var(--muted); }
+
+pre{
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(0,0,0,0.18);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  margin: 10px 0 0;
+}
+
+label{
+  display:flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+
+select,
+input[type="number"],
+input[type="password"],
+input[type="email"],
+input[type="file"],
+input[type="text"],
+textarea{
+  font-family: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(0,0,0,0.20);
+  color: var(--text);
+  outline: none;
+}
+
+select:focus,
+input:focus,
+textarea:focus{
+  border-color: rgba(120,180,255,0.45);
+  box-shadow: 0 0 0 4px rgba(120,180,255,0.10);
+}
+
+button{
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:hover{
+  background: rgba(255,255,255,0.10);
+}
+
+button:active{
+  transform: translateY(1px);
+}
+
+a{ color: var(--accent); }
+
+.otp{
+  font-size: 26px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 1.5px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(0,0,0,0.18);
+  min-width: 120px;
+  text-align: center;
+}
+
+```
+
+## `templates/gen.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass generator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+  <link rel="apple-touch-icon" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+
+</head>
+<body>
+
+  <!-- Header / Nav -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Generator</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink active" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <p class="muted">
+      Generate payloads (URL/Text/TOTP) and render them as QR codes.
+    </p>
+
+    <section class="card">
+      <div class="row">
+        <label>type
+          <select id="kind">
+            <option value="url">URL</option>
+            <option value="text">Text</option>
+            <option value="totp">TOTP (otpauth)</option>
+          </select>
+        </label>
+
+        <label class="row" style="gap:8px;">
+          <input id="doImport" type="checkbox" />
+          import (TOTP only)
+        </label>
+
+        <!-- passphrase removed (multi-user server-side encryption) -->
+
+        <button id="btnGen" type="button">Generate</button>
+      </div>
+
+      <div id="fields" style="margin-top:12px;"></div>
+
+      <p id="status" class="muted"></p>
+    </section>
+
+    <div id="out"></div>
+  </main>
+
+  <script src="{{ url_for('static', filename='gen.js') }}"></script>
+</body>
+</html>
+
+```
+
+## `templates/index.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+  <link rel="apple-touch-icon" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Scanner</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink active" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <p class="muted">
+      Upload a screenshot or photo containing QR codes. Authenticator (otpauth) QRs can be imported and will generate live codes.
+    </p>
+
+    <section class="card">
+      <form id="uploadForm" class="row">
+        <input id="file" type="file" accept="image/*" required />
+
+        <label>max_results
+          <input id="maxResults" type="number" min="1" max="50" value="8" />
+        </label>
+
+        <label class="row" style="gap:8px;">
+          <input id="autoImportOtp" type="checkbox" checked />
+          auto-import otpauth
+        </label>
+
+        <button type="submit">Scan</button>
+      </form>
+
+      <p id="status" class="muted"></p>
+    </section>
+
+    <div id="results"></div>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
+
+```
+
+## `templates/login.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+  <link rel="apple-touch-icon" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Sign in</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink active" href="{{ url_for('login') }}">Login</a>
+      <a class="navlink" href="{{ url_for('register') }}">Register</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h1 style="margin-bottom:8px;">Login</h1>
+      <p class="muted" style="margin-top:0;">
+        Sign in to scan, import authenticators, and view your vault.
+      </p>
+
+      <form method="POST" class="row" style="margin-top:14px;">
+        <label>
+          email
+          <input name="email" type="email" placeholder="you@example.com" required style="min-width:320px;" />
+        </label>
+
+        <label>
+          password
+          <input name="password" type="password" placeholder="••••••••••" required style="min-width:260px;" />
+        </label>
+
+        <button type="submit">Sign in</button>
+      </form>
+
+      {% if error %}
+        <div class="card subtle" style="margin-top:14px; border-color: rgba(255,120,140,0.25);">
+          <div><b>Login failed</b></div>
+          <div class="muted">{{ error }}</div>
+        </div>
+      {% endif %}
+
+      <p class="muted" style="margin-top:14px;">
+        New here? <a href="{{ url_for('register') }}">Create an account</a>
+      </p>
+    </section>
+  </main>
+
+</body>
+</html>
+
+```
+
+## `templates/register.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass register</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+  <link rel="apple-touch-icon" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Create account</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('login') }}">Login</a>
+      <a class="navlink active" href="{{ url_for('register') }}">Register</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h1 style="margin-bottom:8px;">Register</h1>
+      <p class="muted" style="margin-top:0;">
+        Create an account. Use a strong password (10+ characters).
+      </p>
+
+      <form method="POST" class="row" style="margin-top:14px;">
+        <label>
+          email
+          <input name="email" type="email" placeholder="you@example.com" required style="min-width:320px;" />
+        </label>
+
+        <label>
+          password
+          <input name="password" type="password" placeholder="10+ characters" required style="min-width:260px;" />
+        </label>
+
+        <button type="submit">Create</button>
+      </form>
+
+      <div class="card subtle" style="margin-top:14px;">
+        <div><b>Password tips</b></div>
+        <div class="muted">Use a long passphrase. Avoid reusing a password from other sites.</div>
+      </div>
+
+      {% if error %}
+        <div class="card subtle" style="margin-top:14px; border-color: rgba(255,120,140,0.25);">
+          <div><b>Registration failed</b></div>
+          <div class="muted">{{ error }}</div>
+        </div>
+      {% endif %}
+
+      <p class="muted" style="margin-top:14px;">
+        Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+      </p>
+    </section>
+  </main>
+
+</body>
+</html>
+
+```
+
+## `templates/vault.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass vault</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+  <link rel="apple-touch-icon" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Vault</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink active" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <p class="muted">Your stored authenticators. Click to show live code.</p>
+
+    <section class="card">
+      <div id="vault"></div>
+      <p id="status" class="muted"></p>
+    </section>
+  </main>
+
+  <script>
+    async function getJson(url){
+      const r = await fetch(url, {method:"GET"});
+      const d = await r.json().catch(() => ({}));
+      return {ok:r.ok, status:r.status, data:d};
+    }
+
+    const vaultEl = document.getElementById("vault");
+    const statusEl = document.getElementById("status");
+    const intervals = new Set();
+
+    function stopAll(){ for (const i of intervals) clearInterval(i); intervals.clear(); }
+    function esc(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+    async function refreshOne(id){
+      const res = await getJson(`/auth/code?id=${encodeURIComponent(id)}`);
+      if (!res.ok) return null;
+      return res.data;
+    }
+
+    async function load(){
+      stopAll();
+      statusEl.textContent = "Loading...";
+      const res = await getJson("/auth/list");
+      if (!res.ok){
+        statusEl.textContent = "Error loading vault.";
+        return;
+      }
+      const accts = res.data.accounts || [];
+      statusEl.textContent = `Accounts: ${accts.length}`;
+
+      vaultEl.innerHTML = accts.map(a => `
+        <div class="card subtle">
+          <div><b>${esc(a.issuer || "")}</b> ${esc(a.name || "")}</div>
+          <div class="muted">id: ${esc(a.id)}</div>
+          <div style="margin-top:10px;" class="row">
+            <button type="button" data-id="${esc(a.id)}">Show code</button>
+            <div class="otp" id="code-${esc(a.id)}">—</div>
+            <div class="muted" id="rem-${esc(a.id)}"></div>
+          </div>
+        </div>
+      `).join("");
+
+      vaultEl.querySelectorAll("button[data-id]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-id");
+          const codeEl = document.getElementById(`code-${id}`);
+          const remEl  = document.getElementById(`rem-${id}`);
+
+          async function tick(){
+            const d = await refreshOne(id);
+            if (!d) return;
+            codeEl.textContent = d.code || "—";
+            remEl.textContent = (typeof d.seconds_remaining === "number") ? `refresh in ${d.seconds_remaining}s` : "";
+          }
+
+          await tick();
+          const intv = setInterval(tick, 1000);
+          intervals.add(intv);
+        });
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>
+
+```
+
+<details>
+<summary>📁 Final Project Structure</summary>
+
+```
+📁 static/
+    📄 app.js
+    📄 gen.js
+    📄 icon-512.png
+    📄 style.css
+📁 templates/
+    📄 gen.html
+    📄 index.html
+    📄 login.html
+    📄 register.html
+    📄 vault.html
+📄 app.py
+📄 db.py
+📄 run.py
+```
+
+</details>
+
+```
+
+## `src/qrpypass/service/run.py`
+
+```python
+from __future__ import annotations
+
+import os
+from qrpypass.service.app import create_app
+
+app = create_app()
+
+if __name__ == "__main__":
+    host = os.environ.get("QRPYPASS_HOST", "127.0.0.1")
+    port = int(os.environ.get("QRPYPASS_PORT", "5000"))
+    debug = os.environ.get("QRPYPASS_DEBUG", "0") == "1"
+    app.run(host=host, port=port, debug=debug)
+
+```
+
+## `src/qrpypass/service/static/app.js`
+
+```javascript
+const form = document.getElementById("uploadForm");
+const fileInput = document.getElementById("file");
+const maxResults = document.getElementById("maxResults");
+const statusEl = document.getElementById("status");
+const resultsEl = document.getElementById("results");
+
+const autoImportEl = document.getElementById("autoImportOtp");
+
+// Track active timers so we can stop them on a new scan
+const activeIntervals = new Set();
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function stopAllIntervals() {
+  for (const id of activeIntervals) clearInterval(id);
+  activeIntervals.clear();
+}
+
+async function postJson(url, body) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+async function getJson(url) {
+  const r = await fetch(url, { method: "GET" });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+function renderOtpAuthCard({ idx, rawUri }) {
+  const cardId = `otp-card-${idx}`;
+  const codeId = `otp-code-${idx}`;
+  const remId = `otp-rem-${idx}`;
+  const msgId = `otp-msg-${idx}`;
+  const btnId = `otp-btn-${idx}`;
+
+  resultsEl.insertAdjacentHTML(
+    "beforeend",
+    `
+    <div class="card" id="${cardId}">
+      <div><b>#${idx + 1}</b></div>
+      <div><b>kind:</b> otpauth</div>
+      <div class="muted">Provisioning URI detected (secret not displayed in UI).</div>
+
+      <div style="margin-top:12px;" class="row">
+        <button type="button" id="${btnId}">Import &amp; Show Code</button>
+        <span class="muted" id="${msgId}"></span>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div><b>code</b></div>
+        <div style="font-size:28px; font-family: ui-monospace, monospace;" id="${codeId}">—</div>
+        <div class="muted" id="${remId}"></div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div><b>raw payload</b></div>
+        <pre>${escapeHtml(rawUri)}</pre>
+      </div>
+    </div>
+    `
+  );
+
+  const btn = document.getElementById(btnId);
+  const msgEl = document.getElementById(msgId);
+  const codeEl = document.getElementById(codeId);
+  const remEl = document.getElementById(remId);
+
+  let accId = null;
+  let started = false;
+
+  async function refreshCodeOnce() {
+    if (!accId) return;
+
+    const qs = new URLSearchParams({ id: accId });
+    const res = await getJson(`/auth/code?${qs.toString()}`);
+
+    if (!res.ok) {
+      msgEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
+      return;
+    }
+
+    const code = res.data.code || "";
+    const remaining = res.data.seconds_remaining;
+
+    codeEl.textContent = code ? code : "—";
+    remEl.textContent =
+      (typeof remaining === "number")
+        ? `refresh in ${remaining}s`
+        : "";
+  }
+
+  function startLiveRefresh() {
+    if (started) return;
+    started = true;
+
+    refreshCodeOnce();
+
+    const intervalId = setInterval(async () => {
+      await refreshCodeOnce();
+    }, 1000);
+
+    activeIntervals.add(intervalId);
+  }
+
+  btn.addEventListener("click", async () => {
+    msgEl.textContent = "Importing...";
+    codeEl.textContent = "—";
+    remEl.textContent = "";
+
+    const res = await postJson("/auth/import", {
+      otpauth_uri: rawUri,
+    });
+
+    if (!res.ok) {
+      msgEl.textContent = "Error: " + (res.data.error || ("HTTP " + res.status));
+      return;
+    }
+
+    const imported = res.data.imported || {};
+    accId = imported.id || null;
+
+    if (!accId) {
+      msgEl.textContent = "Import failed (no id returned).";
+      return;
+    }
+
+    msgEl.textContent = `Imported id: ${accId}`;
+    startLiveRefresh();
+  });
+
+  // Optional: auto-import if enabled
+  const autoImport = !!(autoImportEl && autoImportEl.checked);
+  if (autoImport) {
+    setTimeout(() => btn.click(), 0);
+  }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  stopAllIntervals();
+  resultsEl.innerHTML = "";
+  statusEl.textContent = "Scanning...";
+
+  const f = fileInput.files[0];
+  if (!f) {
+    statusEl.textContent = "Pick a file first.";
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("max_results", String(maxResults.value || 8));
+
+  try {
+    const resp = await fetch("/scan", { method: "POST", body: fd });
+    const data = await resp.json().catch(() => ({}));
 
     if (!resp.ok) {
       statusEl.textContent = "Error: " + (data.error || resp.statusText);
@@ -3140,6 +4941,145 @@ a{ color: var(--accent); }
 
 ```
 
+## `src/qrpypass/service/templates/debug.html`
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>qr-pypass debug</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .grid { display: grid; grid-template-columns: 220px 1fr; gap: 10px 16px; }
+    .kv { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .ok { color: #7CFC98; }
+    .bad { color: #FF7C7C; }
+    pre { max-height: 320px; overflow: auto; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">qp</div>
+      <div>
+        <div class="title">qr-pypass</div>
+        <div class="subtitle">Debug</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <a class="navlink" href="{{ url_for('index') }}">Scan</a>
+      <a class="navlink" href="{{ url_for('gen_page') }}">Generate</a>
+      <a class="navlink" href="{{ url_for('vault') }}">Vault</a>
+      <a class="navlink danger" href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="row" style="justify-content: space-between; align-items:center;">
+        <div>
+          <div style="font-weight:700;">Runtime status</div>
+          <div class="muted">This page shows what the running web process sees (env, DB path, permissions).</div>
+        </div>
+        <div class="row">
+          <button id="refreshBtn" type="button">Refresh</button>
+          <button id="testBtn" type="button">Test crypto</button>
+        </div>
+      </div>
+
+      <div id="statusMsg" class="muted" style="margin-top:10px;"></div>
+
+      <div id="kv" class="grid mono" style="margin-top:12px;"></div>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <div style="font-weight:700;">Raw JSON</div>
+      <pre id="raw" class="mono" style="margin-top:10px;"></pre>
+    </section>
+  </main>
+
+  <script>
+    const kvEl = document.getElementById("kv");
+    const rawEl = document.getElementById("raw");
+    const statusMsg = document.getElementById("statusMsg");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const testBtn = document.getElementById("testBtn");
+
+    function esc(s) {
+      return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    }
+
+    function row(k, v, good=null) {
+      const cls = good === null ? "" : (good ? "ok" : "bad");
+      return `
+        <div class="kv muted">${esc(k)}</div>
+        <div class="kv ${cls}">${esc(v)}</div>
+      `;
+    }
+
+    async function getJSON(url) {
+      const r = await fetch(url);
+      const txt = await r.text();
+      let data = {};
+      try { data = JSON.parse(txt); } catch { data = { parse_error: true, raw: txt }; }
+      return { ok: r.ok, status: r.status, data };
+    }
+
+    function render(data) {
+      rawEl.textContent = JSON.stringify(data, null, 2);
+
+      const items = [];
+      items.push(row("app_time_utc", data.app_time_utc ?? ""));
+      items.push(row("python", data.python ?? ""));
+      items.push(row("user", data.user ?? ""));
+      items.push(row("cwd", data.cwd ?? ""));
+
+      items.push(row("QRPYPASS_DATA_DIR", data.env?.QRPYPASS_DATA_DIR ?? "(unset)", true));
+      items.push(row("db_path", data.db?.path ?? ""));
+      items.push(row("db_exists", String(data.db?.exists), data.db?.exists === true));
+      items.push(row("db_dir_writable", String(data.db?.dir_writable), data.db?.dir_writable === true));
+      items.push(row("db_file_writable", String(data.db?.file_writable), data.db?.file_writable === true));
+
+      items.push(row("master_key_present", String(data.crypto?.master_key_present), data.crypto?.master_key_present === true));
+      items.push(row("crypto_selftest", String(data.crypto?.selftest_ok), data.crypto?.selftest_ok === true));
+
+      items.push(row("tables_ok", String(data.db?.tables_ok), data.db?.tables_ok === true));
+      items.push(row("totp_count", String(data.db?.totp_count ?? "")));
+
+      kvEl.innerHTML = items.join("");
+    }
+
+    async function refresh() {
+      statusMsg.textContent = "Loading...";
+      const res = await getJSON("/debug/status");
+      statusMsg.textContent = res.ok ? "OK" : ("HTTP " + res.status);
+      render(res.data);
+    }
+
+    async function testCrypto() {
+      statusMsg.textContent = "Testing crypto...";
+      const res = await getJSON("/debug/test_crypto");
+      statusMsg.textContent = res.ok ? "Crypto test complete" : ("Crypto test failed (HTTP " + res.status + ")");
+      // Refresh status after
+      await refresh();
+      if (!res.ok) {
+        alert("Crypto test failed: " + JSON.stringify(res.data));
+      }
+    }
+
+    refreshBtn.addEventListener("click", refresh);
+    testBtn.addEventListener("click", testCrypto);
+    refresh();
+  </script>
+</body>
+</html>
+
+```
+
 ## `src/qrpypass/service/templates/gen.html`
 
 ```html
@@ -3227,13 +5167,14 @@ a{ color: var(--accent); }
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<!-- qrpypass:favicons:begin -->
-<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
-<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
-<!-- qrpypass:favicons:end -->
+
+  <!-- qrpypass:favicons:begin -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+  <!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -3260,7 +5201,7 @@ a{ color: var(--accent); }
     </p>
 
     <section class="card">
-      <form id="uploadForm" class="row">
+      <form id="uploadForm" class="row" autocomplete="off">
         <input id="file" type="file" accept="image/*" required />
 
         <label>max_results
@@ -3450,13 +5391,13 @@ a{ color: var(--accent); }
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>qr-pypass vault</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<!-- qrpypass:favicons:begin -->
-<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
-<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
-<link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
-<!-- qrpypass:favicons:end -->
+  <!-- qrpypass:favicons:begin -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}?v=20260103071729">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon-180.png') }}?v=20260103071729">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icon-512.png') }}?v=20260103071729">
+  <!-- qrpypass:favicons:end -->
 </head>
 <body>
 
@@ -3478,7 +5419,7 @@ a{ color: var(--accent); }
   </header>
 
   <main class="container">
-    <p class="muted">Your stored authenticators. Click to show live code.</p>
+    <p class="muted">Your stored authenticators. Show a live code, hide it, or delete the entry.</p>
 
     <section class="card">
       <div id="vault"></div>
@@ -3493,12 +5434,36 @@ a{ color: var(--accent); }
       return {ok:r.ok, status:r.status, data:d};
     }
 
+    async function postJson(url, body){
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      return {ok:r.ok, status:r.status, data:d};
+    }
+
     const vaultEl = document.getElementById("vault");
     const statusEl = document.getElementById("status");
-    const intervals = new Set();
 
-    function stopAll(){ for (const i of intervals) clearInterval(i); intervals.clear(); }
-    function esc(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+    // one interval per account id
+    const timersById = new Map();
+
+    function esc(s){
+      return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    }
+
+    function stopOne(id){
+      const t = timersById.get(id);
+      if (t) clearInterval(t);
+      timersById.delete(id);
+    }
+
+    function stopAll(){
+      for (const [id, t] of timersById.entries()) clearInterval(t);
+      timersById.clear();
+    }
 
     async function refreshOne(id){
       const res = await getJson(`/auth/code?id=${encodeURIComponent(id)}`);
@@ -3506,14 +5471,67 @@ a{ color: var(--accent); }
       return res.data;
     }
 
+    function setHiddenUI(id){
+      const codeEl = document.getElementById(`code-${id}`);
+      const remEl  = document.getElementById(`rem-${id}`);
+      const btnEl  = document.getElementById(`toggle-${id}`);
+      if (codeEl) codeEl.textContent = "—";
+      if (remEl) remEl.textContent = "";
+      if (btnEl) btnEl.textContent = "Show code";
+    }
+
+    async function startLive(id){
+      stopOne(id); // ensure only one timer
+
+      const btnEl = document.getElementById(`toggle-${id}`);
+      if (btnEl) btnEl.textContent = "Hide";
+
+      async function tick(){
+        const d = await refreshOne(id);
+        if (!d) return;
+
+        const codeEl = document.getElementById(`code-${id}`);
+        const remEl  = document.getElementById(`rem-${id}`);
+        if (codeEl) codeEl.textContent = d.code || "—";
+        if (remEl) remEl.textContent =
+          (typeof d.seconds_remaining === "number") ? `refresh in ${d.seconds_remaining}s` : "";
+      }
+
+      await tick();
+      const t = setInterval(tick, 1000);
+      timersById.set(id, t);
+    }
+
+    async function deleteOne(id){
+      // stop & hide immediately for safety
+      stopOne(id);
+      setHiddenUI(id);
+
+      const ok = confirm("Delete this authenticator from your vault?");
+      if (!ok) return;
+
+      statusEl.textContent = "Deleting...";
+      const res = await postJson("/auth/delete", {id});
+
+      if (!res.ok){
+        statusEl.textContent = "Delete failed: " + (res.data.error || ("HTTP " + res.status));
+        return;
+      }
+
+      statusEl.textContent = "Deleted.";
+      await load(); // refresh list
+    }
+
     async function load(){
       stopAll();
       statusEl.textContent = "Loading...";
+
       const res = await getJson("/auth/list");
       if (!res.ok){
         statusEl.textContent = "Error loading vault.";
         return;
       }
+
       const accts = res.data.accounts || [];
       statusEl.textContent = `Accounts: ${accts.length}`;
 
@@ -3521,30 +5539,37 @@ a{ color: var(--accent); }
         <div class="card subtle">
           <div><b>${esc(a.issuer || "")}</b> ${esc(a.name || "")}</div>
           <div class="muted">id: ${esc(a.id)}</div>
+
           <div style="margin-top:10px;" class="row">
-            <button type="button" data-id="${esc(a.id)}">Show code</button>
+            <button type="button" id="toggle-${esc(a.id)}" data-id="${esc(a.id)}">Show code</button>
+            <button type="button" class="danger" id="del-${esc(a.id)}" data-id="${esc(a.id)}">Delete</button>
+
             <div class="otp" id="code-${esc(a.id)}">—</div>
             <div class="muted" id="rem-${esc(a.id)}"></div>
           </div>
         </div>
       `).join("");
 
-      vaultEl.querySelectorAll("button[data-id]").forEach(btn => {
+      // Toggle show/hide
+      vaultEl.querySelectorAll("button[id^='toggle-']").forEach(btn => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-id");
-          const codeEl = document.getElementById(`code-${id}`);
-          const remEl  = document.getElementById(`rem-${id}`);
+          const isRunning = timersById.has(id);
 
-          async function tick(){
-            const d = await refreshOne(id);
-            if (!d) return;
-            codeEl.textContent = d.code || "—";
-            remEl.textContent = (typeof d.seconds_remaining === "number") ? `refresh in ${d.seconds_remaining}s` : "";
+          if (isRunning){
+            stopOne(id);
+            setHiddenUI(id);
+          } else {
+            await startLive(id);
           }
+        });
+      });
 
-          await tick();
-          const intv = setInterval(tick, 1000);
-          intervals.add(intv);
+      // Delete
+      vaultEl.querySelectorAll("button[id^='del-']").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-id");
+          await deleteOne(id);
         });
       });
     }
@@ -4005,15 +6030,349 @@ if __name__ == "__main__":
 
 ```
 
+## `tools/update_favicons_and_html.py`
+
+```python
+#!/usr/bin/env python3
+"""
+Update qrpypass service favicons + patch all template HTML <head> sections.
+
+Works regardless of where this script is located by auto-detecting repo root
+(the directory that contains "src/qrpypass/service").
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+from datetime import datetime
+
+try:
+    from PIL import Image
+except Exception:
+    print("ERROR: Pillow is required. Install with: pip install pillow")
+    raise
+
+
+FAVICON_BLOCK_BEGIN = "<!-- qrpypass:favicons:begin -->"
+FAVICON_BLOCK_END = "<!-- qrpypass:favicons:end -->"
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"ERROR: {msg}")
+    sys.exit(code)
+
+
+def find_repo_root(start: Path) -> Path:
+    """
+    Walk upwards until we find src/qrpypass/service.
+    """
+    p = start.resolve()
+    for _ in range(12):
+        candidate = p / "src" / "qrpypass" / "service"
+        if candidate.exists():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    die(f"Could not find repo root from {start}. Expected to find src/qrpypass/service somewhere above.")
+
+
+def gen_png_sizes(static_dir: Path, src_png: Path, sizes: list[int]) -> None:
+    img = Image.open(src_png).convert("RGBA")
+    for sz in sizes:
+        out = static_dir / f"favicon-{sz}.png"
+        img.resize((sz, sz), Image.LANCZOS).save(out, format="PNG", optimize=True)
+
+
+def gen_apple_touch(static_dir: Path, src_png: Path, size: int = 180) -> None:
+    img = Image.open(src_png).convert("RGBA")
+    out = static_dir / f"apple-touch-icon-{size}.png"
+    img.resize((size, size), Image.LANCZOS).save(out, format="PNG", optimize=True)
+
+
+def gen_favicon_ico(static_dir: Path, src_png: Path) -> None:
+    img = Image.open(src_png).convert("RGBA")
+    out = static_dir / "favicon.ico"
+    # multi-size ICO: best compatibility (Firefox especially)
+    img.save(out, format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
+
+
+def build_favicon_block(version_tag: str) -> str:
+    v = version_tag
+    # Keep this block pure Jinja-compatible HTML
+    lines = [
+        FAVICON_BLOCK_BEGIN,
+        f'<link rel="icon" href="{{{{ url_for(\'static\', filename=\'favicon.ico\') }}}}?v={v}">',
+        f'<link rel="icon" type="image/png" sizes="32x32" href="{{{{ url_for(\'static\', filename=\'favicon-32.png\') }}}}?v={v}">',
+        f'<link rel="icon" type="image/png" sizes="16x16" href="{{{{ url_for(\'static\', filename=\'favicon-16.png\') }}}}?v={v}">',
+        f'<link rel="apple-touch-icon" sizes="180x180" href="{{{{ url_for(\'static\', filename=\'apple-touch-icon-180.png\') }}}}?v={v}">',
+        f'<link rel="icon" type="image/png" sizes="512x512" href="{{{{ url_for(\'static\', filename=\'icon-512.png\') }}}}?v={v}">',
+        FAVICON_BLOCK_END,
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def patch_html_file(path: Path, block: str) -> bool:
+    """
+    Inserts or replaces the favicon block inside <head>...</head>.
+    Returns True if file changed.
+    """
+    text = path.read_text(encoding="utf-8")
+
+    # Replace existing managed block (idempotent)
+    if FAVICON_BLOCK_BEGIN in text and FAVICON_BLOCK_END in text:
+        new_text = re.sub(
+            re.escape(FAVICON_BLOCK_BEGIN) + r".*?" + re.escape(FAVICON_BLOCK_END) + r"\s*",
+            block,
+            text,
+            flags=re.DOTALL,
+        )
+        if new_text != text:
+            path.write_text(new_text, encoding="utf-8")
+            return True
+        return False
+
+    # Remove any prior favicon link tags (so we don't duplicate)
+    cleaned = re.sub(r'^\s*<link\s+rel="icon"[^>]*>\s*$', "", text, flags=re.MULTILINE)
+    cleaned = re.sub(r'^\s*<link\s+rel="apple-touch-icon"[^>]*>\s*$', "", cleaned, flags=re.MULTILINE)
+
+    # Insert right before </head>
+    m = re.search(r"</head\s*>", cleaned, flags=re.IGNORECASE)
+    if not m:
+        die(f"{path} has no </head> tag; cannot patch safely.")
+
+    insert_at = m.start()
+    new_text = cleaned[:insert_at].rstrip() + "\n" + block + cleaned[insert_at:]
+
+    if new_text != text:
+        path.write_text(new_text, encoding="utf-8")
+        return True
+    return False
+
+
+def main() -> None:
+    repo_root = find_repo_root(Path.cwd())
+
+    service_dir = repo_root / "src" / "qrpypass" / "service"
+    static_dir = service_dir / "static"
+    templates_dir = service_dir / "templates"
+
+    if not static_dir.exists():
+        die(f"Static dir not found: {static_dir}")
+    if not templates_dir.exists():
+        die(f"Templates dir not found: {templates_dir}")
+
+    src_icon = static_dir / "icon-512.png"
+    if not src_icon.exists():
+        die(f"Missing {src_icon}. Put your logo there first.")
+
+    # Generate assets
+    gen_png_sizes(static_dir, src_icon, sizes=[16, 32, 48])
+    gen_apple_touch(static_dir, src_icon, size=180)
+    gen_favicon_ico(static_dir, src_icon)
+
+    # Cache bust (UTC timestamp)
+    version_tag = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    block = build_favicon_block(version_tag)
+
+    changed = 0
+    for html in sorted(templates_dir.glob("*.html")):
+        if patch_html_file(html, block):
+            changed += 1
+            print(f"patched: {html.relative_to(repo_root)}")
+
+    print("\nDONE")
+    print(f"Generated favicons in: {static_dir.relative_to(repo_root)}")
+    print(f"Patched {changed} template(s) in: {templates_dir.relative_to(repo_root)}")
+    print("\nNext:")
+    print("  git add src/qrpypass/service/static/favicon* src/qrpypass/service/static/apple-touch-icon-180.png src/qrpypass/service/templates/*.html")
+    print('  git commit -m "Add multi-size favicons and patch templates"')
+    print("  git push")
+
+
+if __name__ == "__main__":
+    main()
+
+```
+
+## `update_favicons_and_html.py`
+
+```python
+#!/usr/bin/env python3
+"""
+Update qrpypass service favicons + patch all template HTML <head> sections.
+
+- Generates favicon PNG sizes + favicon.ico from static/icon-512.png (or another source)
+- Rewrites templates/*.html so they all include a consistent favicon block
+- Idempotent: running multiple times won't keep duplicating blocks
+
+Assumes project layout from project.md:
+  src/qrpypass/service/static/
+  src/qrpypass/service/templates/
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+from datetime import datetime
+
+try:
+    from PIL import Image
+except Exception as e:
+    print("ERROR: Pillow is required. Install with: pip install pillow")
+    raise
+
+ROOT = Path(__file__).resolve().parents[1]  # repo root if script lives in tools/
+SERVICE_DIR = ROOT / "src" / "qrpypass" / "service"
+STATIC_DIR = SERVICE_DIR / "static"
+TEMPLATES_DIR = SERVICE_DIR / "templates"
+
+FAVICON_BLOCK_BEGIN = "<!-- qrpypass:favicons:begin -->"
+FAVICON_BLOCK_END = "<!-- qrpypass:favicons:end -->"
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"ERROR: {msg}")
+    sys.exit(code)
+
+def gen_png_sizes(src_png: Path, sizes: list[int]) -> None:
+    img = Image.open(src_png).convert("RGBA")
+    for sz in sizes:
+        out = STATIC_DIR / f"favicon-{sz}.png"
+        resized = img.resize((sz, sz), Image.LANCZOS)
+        resized.save(out, format="PNG", optimize=True)
+
+def gen_apple_touch(src_png: Path, size: int = 180) -> None:
+    img = Image.open(src_png).convert("RGBA")
+    out = STATIC_DIR / f"apple-touch-icon-{size}.png"
+    img.resize((size, size), Image.LANCZOS).save(out, format="PNG", optimize=True)
+
+def gen_favicon_ico(src_png: Path, ico_path: Path) -> None:
+    img = Image.open(src_png).convert("RGBA")
+    # multi-size ICO for best browser support (Firefox loves this)
+    sizes = [(16, 16), (32, 32), (48, 48)]
+    img.save(ico_path, format="ICO", sizes=sizes)
+
+def build_favicon_block(version_tag: str) -> str:
+    # Cache-bust query param to force Firefox to update if needed
+    v = version_tag
+    lines = [
+        FAVICON_BLOCK_BEGIN,
+        f'<link rel="icon" href="{{{{ url_for(\'static\', filename=\'favicon.ico\') }}}}?v={v}">',
+        f'<link rel="icon" type="image/png" sizes="32x32" href="{{{{ url_for(\'static\', filename=\'favicon-32.png\') }}}}?v={v}">',
+        f'<link rel="icon" type="image/png" sizes="16x16" href="{{{{ url_for(\'static\', filename=\'favicon-16.png\') }}}}?v={v}">',
+        f'<link rel="apple-touch-icon" sizes="180x180" href="{{{{ url_for(\'static\', filename=\'apple-touch-icon-180.png\') }}}}?v={v}">',
+        f'<link rel="icon" type="image/png" sizes="512x512" href="{{{{ url_for(\'static\', filename=\'icon-512.png\') }}}}?v={v}">',
+        FAVICON_BLOCK_END,
+        "",
+    ]
+    return "\n".join(lines)
+
+def patch_html_file(path: Path, block: str) -> bool:
+    """
+    Inserts or replaces the favicon block inside <head>...</head>.
+    Returns True if file changed.
+    """
+    text = path.read_text(encoding="utf-8")
+
+    # If block already exists, replace it
+    if FAVICON_BLOCK_BEGIN in text and FAVICON_BLOCK_END in text:
+        new_text = re.sub(
+            re.escape(FAVICON_BLOCK_BEGIN) + r".*?" + re.escape(FAVICON_BLOCK_END) + r"\s*",
+            block,
+            text,
+            flags=re.DOTALL,
+        )
+        if new_text != text:
+            path.write_text(new_text, encoding="utf-8")
+            return True
+        return False
+
+    # Otherwise remove old favicon link tags we previously used (512-only etc.)
+    # Keep stylesheet and other head tags.
+    cleaned = re.sub(
+        r'^\s*<link\s+rel="icon"[^>]*>\s*$',
+        "",
+        text,
+        flags=re.MULTILINE,
+    )
+    cleaned = re.sub(
+        r'^\s*<link\s+rel="apple-touch-icon"[^>]*>\s*$',
+        "",
+        cleaned,
+        flags=re.MULTILINE,
+    )
+
+    # Insert block right before </head>
+    m = re.search(r"</head\s*>", cleaned, flags=re.IGNORECASE)
+    if not m:
+        die(f"{path} has no </head> tag; cannot patch safely.")
+
+    insert_at = m.start()
+    new_text = cleaned[:insert_at].rstrip() + "\n" + block + cleaned[insert_at:]
+
+    if new_text != text:
+        path.write_text(new_text, encoding="utf-8")
+        return True
+    return False
+
+def main() -> None:
+    if not SERVICE_DIR.exists():
+        die(f"Service dir not found at {SERVICE_DIR}")
+
+    STATIC_DIR.mkdir(parents=True, exist_ok=True)
+    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Source icon
+    src_icon = STATIC_DIR / "icon-512.png"
+    if not src_icon.exists():
+        die(f"Missing {src_icon}. Put your logo there (or adjust script).")
+
+    # Generate image assets
+    gen_png_sizes(src_icon, sizes=[16, 32, 48])
+    gen_apple_touch(src_icon, size=180)
+    gen_favicon_ico(src_icon, STATIC_DIR / "favicon.ico")
+
+    # Cache-bust tag (date-based)
+    version_tag = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    block = build_favicon_block(version_tag)
+
+    # Patch all templates
+    if not TEMPLATES_DIR.exists():
+        die(f"Templates dir not found at {TEMPLATES_DIR}")
+
+    changed = 0
+    for html in sorted(TEMPLATES_DIR.glob("*.html")):
+        if patch_html_file(html, block):
+            changed += 1
+            print(f"patched: {html.relative_to(ROOT)}")
+
+    print("")
+    print("DONE")
+    print(f"Generated favicons in: {STATIC_DIR.relative_to(ROOT)}")
+    print(f"Patched {changed} template(s) in: {TEMPLATES_DIR.relative_to(ROOT)}")
+    print("")
+    print("Next:")
+    print("  - git add src/qrpypass/service/static/favicon* src/qrpypass/service/static/apple-touch-icon-180.png src/qrpypass/service/templates/*.html")
+    print("  - git commit -m \"Add multi-size favicons and patch templates\"")
+    print("  - reload PythonAnywhere web app (and hard-refresh Firefox)")
+
+if __name__ == "__main__":
+    main()
+
+```
+
 <details>
 <summary>📁 Final Project Structure</summary>
 
 ```
-📁 _data/
-    📄 app.db
 📁 dist/
-    📄 qrpypass-0.1.2-py3-none-any.whl
-    📄 qrpypass-0.1.2.tar.gz
+    📄 qrpypass-0.2.0-py3-none-any.whl
+    📄 qrpypass-0.2.0.tar.gz
 📁 images/
     📄 qr-logo.png
     📄 qr.png
@@ -4052,6 +6411,7 @@ if __name__ == "__main__":
                 📄 icon-512.png
                 📄 style.css
             📁 templates/
+                📄 debug.html
                 📄 gen.html
                 📄 index.html
                 📄 login.html
@@ -4059,6 +6419,7 @@ if __name__ == "__main__":
                 📄 vault.html
             📄 app.py
             📄 db.py
+            📄 project.md
             📄 run.py
         📄 __init__.py
     📁 qrpypass.egg-info/
@@ -4074,11 +6435,15 @@ if __name__ == "__main__":
     📄 api-test.py
     📄 full_api_smoke.py
     📄 test_totp_verify_flow.py
+📁 tools/
+    📄 update_favicons_and_html.py
 📄 gitignore
+📄 project.md
 📄 pyproject.toml
 📄 README.md
 📄 requirements.txt
 📄 setup.py
+📄 update_favicons_and_html.py
 ```
 
 </details>

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: qrpypass
-Version: 0.1.2
+Version: 0.2.0
 Summary: Headless QR decoder + TOTP authenticator Flask mini-service
 Author: Josh Gompert
 Author-email: 
@@ -11,6 +11,8 @@ Project-URL: Issues, https://github.com/ginkorea/qr-pypass/issues
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
 Dynamic: requires-python
+
+![qr-pypass logo](images/qr-logo.png)
 
 # qr-pypass
 
