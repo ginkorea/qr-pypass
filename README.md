@@ -1,10 +1,12 @@
-![qr-pypass logo](images/qr-logo.png)
-
 # qr-pypass
 
-**qr-pypass** is a lightweight, headless QR decoding and TOTP authentication service built for **offline-first security workflows**.
+![qr-pypass logo](images/qr-logo.png)
 
-It is designed for air-gapped labs, red-team and blue-team tooling, automation pipelines, and environments where QR codes and 2FA need to be processed **locally**, without mobile devices or cloud dependencies.
+**qr-pypass** is a **local-first, headless QR decoding and TOTP service** designed for **security workflows, air-gapped environments, and automation pipelines**.
+
+It is built to reliably decode *real-world QR codes* such as phone screenshots, camera photos, cropped images, and distorted captures — without cloud APIs, mobile devices, or external services.
+
+The project now uses **state-of-the-art QR detection via OpenCV’s WeChat QR detector**, which significantly outperforms legacy ZXing-style decoders on modern smartphone imagery.
 
 **Homepage:** [https://ginkorea.one](https://ginkorea.one)
 **Source:** [https://github.com/ginkorea/qr-pypass](https://github.com/ginkorea/qr-pypass)
@@ -12,69 +14,102 @@ It is designed for air-gapped labs, red-team and blue-team tooling, automation p
 
 ---
 
-## What It Does
+## Why qr-pypass Exists
 
-With `qr-pypass`, you can:
+Most QR libraries work well only for:
 
-* Decode QR codes from screenshots or images
-* Detect and classify QR payloads (URL, text, otpauth)
-* Generate QR codes programmatically
-* Generate, import, store, and verify TOTP (RFC 6238) secrets
-* Run everything locally with no outbound network access
+• perfectly cropped QR codes
+• synthetic QR images
+• ideal lighting and contrast
 
-The project exposes both:
+They often fail on:
 
-* A **Python API** for direct integration
-* A **Flask-based HTTP service** with a minimal web UI
+• phone screenshots
+• camera photos
+• skewed or rotated QRs
+• partial codes
+• high-resolution images
+
+**qr-pypass is designed for the messiness of reality.**
+
+It was built for red teams, blue teams, labs, SOC tooling, and automation where QR and 2FA artifacts need to be decoded **locally and reliably**.
 
 ---
 
-## Core Features
+## Core Capabilities
 
-### QR Decoding
+### QR Detection and Decoding
 
-* Detects **multiple QR codes anywhere in an image**
-* Uses OpenCV with multi-pass detection and tiling fallback
-* Returns bounding boxes, corner points, and decode method
-* Robust against screenshots, partial QRs, and large images
+* **WeChat QR detector (OpenCV contrib)** — primary engine
+* Detects **multiple QR codes per image**
+* Handles:
+
+  * screenshots
+  * camera photos
+  * large images
+  * rotated or skewed QRs
+* Returns:
+
+  * decoded payload
+  * bounding box
+  * corner points
+  * detection method used
+
+WeChat QR is now the **first-pass detector** and succeeds on cases where older approaches fail.
+
+---
 
 ### Payload Classification
 
-Automatically classifies decoded payloads as:
+Decoded payloads are automatically classified as:
 
-* `url` (with normalization)
+* `url`
 * `text`
-* `otpauth` (TOTP provisioning URIs)
+* `otpauth` (RFC-compliant TOTP provisioning URIs)
 
-### TOTP / OTPAuth
+This allows direct routing into downstream automation or security workflows.
 
-* Generate RFC-compliant `otpauth://totp` URIs
-* Import existing provisioning URIs
-* Secure local storage (optional encryption at rest)
+---
+
+### TOTP / OTPAuth Support
+
+* Generate RFC-6238 compliant TOTP secrets
+* Import existing `otpauth://totp` URIs
+* Store secrets locally (optionally encrypted at rest)
 * Generate current TOTP codes
-* Verify TOTP codes with configurable time window
+* Verify TOTP codes with configurable time drift
+
+This enables **headless authenticator workflows** without phones or apps.
+
+---
 
 ### QR Generation
 
-* Generate QR codes for:
+Generate QR codes for:
 
-  * URLs
-  * Arbitrary text
-  * TOTP provisioning URIs
-* Control box size and border
-* Outputs PNG images
+* URLs
+* arbitrary text
+* TOTP provisioning URIs
 
-### Service and Web UI
+Options include:
 
-* Flask-based HTTP API
-* Minimal web UI for:
+* configurable box size
+* configurable border
+* PNG output
 
-  * Uploading screenshots or images
-  * Viewing decoded QR payloads
-  * Generating QR codes
-  * Managing stored TOTP accounts
+---
 
-No JavaScript frameworks. No external assets.
+### HTTP Service + Minimal UI
+
+`qr-pypass` exposes:
+
+* a **Python API**
+* a **Flask-based HTTP service**
+* a **minimal web UI**
+
+No JavaScript frameworks.
+No external assets.
+No cloud calls.
 
 ---
 
@@ -86,7 +121,7 @@ No JavaScript frameworks. No external assets.
 pip install qrpypass
 ```
 
-Python **3.9+** is required.
+Python **3.9+** required.
 
 ---
 
@@ -111,7 +146,7 @@ pip install -e .
 python -m qrpypass.service.run
 ```
 
-By default, the service runs at:
+Default address:
 
 ```
 http://127.0.0.1:5000
@@ -121,26 +156,27 @@ http://127.0.0.1:5000
 
 ## Configuration
 
-The service can be configured using environment variables:
+Environment variables:
 
-| Variable             | Default       | Description                     |
-| -------------------- | ------------- | ------------------------------- |
-| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address                    |
-| `QRPYPASS_PORT`      | `5000`        | Port                            |
-| `QRPYPASS_DEBUG`     | `0`           | Enable Flask debug mode         |
-| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Local account storage directory |
+| Variable             | Default       | Description                |
+| -------------------- | ------------- | -------------------------- |
+| `QRPYPASS_HOST`      | `127.0.0.1`   | Bind address               |
+| `QRPYPASS_PORT`      | `5000`        | Port                       |
+| `QRPYPASS_DEBUG`     | `0`           | Flask debug mode           |
+| `QRPYPASS_QR_DEBUG`  | `0`           | QR detection debug logging |
+| `QRPYPASS_STORE_DIR` | `~/.qrpypass` | Local TOTP storage         |
 
 ---
 
 ## Web UI Routes
 
-* `/` – QR scan UI (upload screenshots or images)
-* `/gen` – QR payload and TOTP generator
-* `/vault` – Stored TOTP account management
+* `/` — QR scan UI (upload screenshots or photos)
+* `/gen` — payload and QR generator
+* `/vault` — TOTP account management
 
 ---
 
-## API Overview
+## HTTP API Overview
 
 ### Health Check
 
@@ -159,8 +195,10 @@ Content-Type: multipart/form-data
 
 **Form fields**
 
-* `file` (required) – image file
+* `file` (required)
 * `max_results` (optional, default: 8)
+
+Returns structured detection results including bounding boxes.
 
 ---
 
@@ -174,7 +212,7 @@ Content-Type: application/json
 ```json
 {
   "kind": "url | text | totp",
-  "params": { },
+  "params": {},
   "import": false,
   "passphrase": null
 }
@@ -203,14 +241,14 @@ Returns `image/png`.
 
 ### TOTP Endpoints
 
-| Endpoint            | Description           |
-| ------------------- | --------------------- |
-| `POST /auth/import` | Import otpauth URI    |
-| `GET /auth/list`    | List stored accounts  |
-| `GET /auth/code`    | Get current TOTP code |
-| `POST /auth/verify` | Verify TOTP code      |
+| Endpoint            | Description        |
+| ------------------- | ------------------ |
+| `POST /auth/import` | Import otpauth URI |
+| `GET /auth/list`    | List accounts      |
+| `GET /auth/code`    | Get current code   |
+| `POST /auth/verify` | Verify code        |
 
-An optional `passphrase` encrypts the TOTP store at rest.
+Optional passphrase enables encryption at rest.
 
 ---
 
@@ -228,7 +266,7 @@ for hit in hits:
 
 ## Testing
 
-End-to-end tests are included:
+Included end-to-end tests:
 
 ```bash
 python test/api-test.py
@@ -236,29 +274,30 @@ python test/full_api_smoke.py
 python test/test_totp_verify_flow.py
 ```
 
-These cover:
+Covers:
 
 * QR generation → scan → classification
-* TOTP generation, import, code generation, and verification
+* TOTP generation, import, code, and verification
 
 ---
 
-## Security Notes
+## Security Model
 
-* Secrets are never logged
-* TOTP storage can be encrypted at rest
 * No outbound network access
-* Suitable for air-gapped or lab environments
+* Secrets never logged
+* Optional encryption at rest
+* Designed for offline and air-gapped use
 
 ---
 
 ## Common Use Cases
 
-* QR extraction from screenshots (2FA enrollment, phishing analysis)
-* Headless TOTP verification in security tooling
+* Extract QR payloads from screenshots
+* Analyze phishing or 2FA enrollment flows
+* Headless TOTP verification
 * Red-team and blue-team labs
 * Offline QR decoding pipelines
-* Local alternatives to mobile authenticator apps
+* Mobile-free authenticator replacement
 
 ---
 
@@ -272,4 +311,3 @@ MIT
 
 **Josh Gompert**
 [https://ginkorea.one](https://ginkorea.one)
-

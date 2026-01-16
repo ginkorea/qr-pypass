@@ -5,17 +5,16 @@
 | Metric | Value |
 |:--|:--|
 | Root Directory | `/home/gompert/data/workspace/qr-pypass` |
-| Total Directories | 15 |
+| Total Directories | 14 |
 | Total Indexed Files | 48 |
-| Skipped Files | 12 |
-| Indexed Size | 202.85 KB |
+| Skipped Files | 11 |
+| Indexed Size | 188.38 KB |
 | Max File Size Limit | 2 MB |
 
 ## 📚 Table of Contents
 
 - [.gitignore](#gitignore)
 - [README.md](#readme-md)
-- [dist/qrpypass-0.2.2-py3-none-any.whl](#dist-qrpypass-0-2-2-py3-none-any-whl)
 - [gitignore](#gitignore)
 - [pyproject.toml](#pyproject-toml)
 - [requirements.txt](#requirements-txt)
@@ -23,6 +22,7 @@
 - [src/qrpypass.egg-info/PKG-INFO](#src-qrpypass-egg-info-pkg-info)
 - [src/qrpypass.egg-info/SOURCES.txt](#src-qrpypass-egg-info-sources-txt)
 - [src/qrpypass.egg-info/dependency_links.txt](#src-qrpypass-egg-info-dependency-links-txt)
+- [src/qrpypass.egg-info/requires.txt](#src-qrpypass-egg-info-requires-txt)
 - [src/qrpypass.egg-info/top_level.txt](#src-qrpypass-egg-info-top-level-txt)
 - [src/qrpypass/__init__.py](#src-qrpypass-init-py)
 - [src/qrpypass/auth/__init__.py](#src-qrpypass-auth-init-py)
@@ -65,9 +65,6 @@
 ## 📂 Project Structure
 
 ```
-📁 dist/
-    📄 qrpypass-0.2.2-py3-none-any.whl
-    📄 qrpypass-0.2.2.tar.gz
 📁 images/
     📄 qr-logo.png
     📄 qr.png
@@ -121,6 +118,7 @@
     📁 qrpypass.egg-info/
         📄 dependency_links.txt
         📄 PKG-INFO
+        📄 requires.txt
         📄 SOURCES.txt
         📄 top_level.txt
 📁 test/
@@ -473,7 +471,7 @@ logs/
 ```toml
 [project]
 name = "qrpypass"
-version = "0.2.2"
+version = "0.2.3"
 description = "Headless QR decoder + TOTP authenticator Flask mini-service"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -482,26 +480,43 @@ license = { text = "MIT" }
 authors = [
   { name = "Josh Gompert" }
 ]
+
+dependencies = [
+  "Flask>=3.0.0",
+  "cryptography>=41.0.0",
+  "Pillow>=10.0.0",
+  "numpy>=1.23.0",
+  "qrcode[pil]>=7.4.2",
+  "opencv-contrib-python-headless>=4.8.0",
+  "pyzbar>=0.1.9",
+  "zxing-cpp>=2.2.0",
+]
+
 [project.urls]
 Homepage = "https://ginkorea.one"
 Repository = "https://github.com/ginkorea/qr-pypass"
 Issues = "https://github.com/ginkorea/qr-pypass/issues"
-
 
 ```
 
 ## `requirements.txt`
 
 ```text
-opencv-python>=4.8.0
-cryptography>=41.0.0
+# Core
 Flask>=3.0.0
-qrcode[pil]>=7.4.2
+cryptography>=41.0.0
 Pillow>=10.0.0
-Flask-Login>=0.6.3
-Flask-Limiter>=3.7.0
-pyzbar>=1.9.0
+numpy>=1.23.0
 
+# QR generation
+qrcode[pil]>=7.4.2
+
+# Computer vision (WeChatQRCode lives in contrib)
+opencv-contrib-python-headless>=4.8.0
+
+# QR decoding backends (recommended; soft-fail at runtime if system libs missing)
+pyzbar>=0.1.9
+zxing-cpp>=2.2.0
 
 ```
 
@@ -512,18 +527,22 @@ from setuptools import setup, find_packages
 
 setup(
     name="qrpypass",
-    version="0.2.2",
+    version="0.2.3",
     description="Headless QR decoder + TOTP authenticator Flask mini-service",
     author="Josh Gompert",
     author_email="",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
+    include_package_data=True,
     install_requires=[
-        "opencv-python>=4.8.0",
-        "cryptography>=41.0.0",
         "Flask>=3.0.0",
-        "qrcode[pil]>=7.4.2",
+        "cryptography>=41.0.0",
         "Pillow>=10.0.0",
+        "numpy>=1.23.0",
+        "qrcode[pil]>=7.4.2",
+        "opencv-contrib-python-headless>=4.8.0",
+        "pyzbar>=0.1.9",
+        "zxing-cpp>=2.2.0",
     ],
     python_requires=">=3.9",
 )
@@ -535,7 +554,7 @@ setup(
 ```text
 Metadata-Version: 2.4
 Name: qrpypass
-Version: 0.2.2
+Version: 0.2.3
 Summary: Headless QR decoder + TOTP authenticator Flask mini-service
 Author: Josh Gompert
 Author-email: 
@@ -545,6 +564,13 @@ Project-URL: Repository, https://github.com/ginkorea/qr-pypass
 Project-URL: Issues, https://github.com/ginkorea/qr-pypass/issues
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
+Requires-Dist: Flask>=3.0.0
+Requires-Dist: cryptography>=41.0.0
+Requires-Dist: Pillow>=10.0.0
+Requires-Dist: qrcode[pil]>=7.4.2
+Requires-Dist: opencv-contrib-python>=4.8.0
+Requires-Dist: pyzbar>=0.1.9
+Requires-Dist: zxing-cpp>=2.2.0
 Dynamic: requires-python
 
 ![qr-pypass logo](images/qr-logo.png)
@@ -835,6 +861,7 @@ src/qrpypass/__init__.py
 src/qrpypass.egg-info/PKG-INFO
 src/qrpypass.egg-info/SOURCES.txt
 src/qrpypass.egg-info/dependency_links.txt
+src/qrpypass.egg-info/requires.txt
 src/qrpypass.egg-info/top_level.txt
 src/qrpypass/auth/__init__.py
 src/qrpypass/auth/generate.py
@@ -864,6 +891,19 @@ test/test_totp_verify_flow.py
 
 ```text
 
+
+```
+
+## `src/qrpypass.egg-info/requires.txt`
+
+```text
+Flask>=3.0.0
+cryptography>=41.0.0
+Pillow>=10.0.0
+qrcode[pil]>=7.4.2
+opencv-contrib-python>=4.8.0
+pyzbar>=0.1.9
+zxing-cpp>=2.2.0
 
 ```
 
@@ -1643,7 +1683,8 @@ __all__ = ["QRResult", "scan_qr_anywhere", "ScanHit", "scan_and_classify"]
 ```python
 from __future__ import annotations
 
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
+
 import cv2
 import numpy as np
 
@@ -1654,123 +1695,286 @@ class QRDecodeError(RuntimeError):
     pass
 
 
-# ----------------------------
-# Helpers
-# ----------------------------
+def _ensure_gray_u8(img: np.ndarray) -> np.ndarray:
+    if img is None:
+        return img
+    if img.ndim == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if img.dtype != np.uint8:
+        # Clip if needed (e.g., float images)
+        if np.issubdtype(img.dtype, np.floating):
+            img = np.clip(img, 0, 255).astype(np.uint8)
+        else:
+            img = img.astype(np.uint8, copy=False)
+    return img
 
-def _bbox_from_corners(corners: np.ndarray) -> Tuple[int, int, int, int]:
-    xs, ys = corners[:, 0], corners[:, 1]
-    x0, y0 = int(xs.min()), int(ys.min())
-    x1, y1 = int(xs.max()), int(ys.max())
-    return x0, y0, max(1, x1 - x0), max(1, y1 - y0)
+
+def _points_to_bbox(points: Optional[np.ndarray]) -> Optional[Tuple[int, int, int, int]]:
+    if points is None:
+        return None
+    pts = np.asarray(points, dtype=float).reshape(-1, 2)
+    if pts.size == 0:
+        return None
+    x1 = float(np.min(pts[:, 0]))
+    y1 = float(np.min(pts[:, 1]))
+    x2 = float(np.max(pts[:, 0]))
+    y2 = float(np.max(pts[:, 1]))
+    return (
+        int(round(x1)),
+        int(round(y1)),
+        int(round(max(1.0, x2 - x1))),
+        int(round(max(1.0, y2 - y1))),
+    )
 
 
-# ----------------------------
-# OpenCV QRCodeDetector decoders
-# ----------------------------
+# ---------------------------------------------------------------------
+# pyzbar / zbar
+# ---------------------------------------------------------------------
+try:
+    from pyzbar.pyzbar import decode as _zbar_decode  # type: ignore
+    from pyzbar.pyzbar import ZBarSymbol  # type: ignore
 
-def decode_multi(img: np.ndarray, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
-    """
-    Decode multiple QR codes from an image using OpenCV.
-    Optionally accept a shared QRCodeDetector instance for performance.
-    """
-    if det is None:
-        det = cv2.QRCodeDetector()
+    _HAS_PYZBAR = True
+except Exception:
+    _HAS_PYZBAR = False
+    _zbar_decode = None
+    ZBarSymbol = None
+
+
+def _decode_pyzbar(gray: np.ndarray, *, method: str) -> List[QRResult]:
+    if not _HAS_PYZBAR or gray is None:
+        return []
+    gray = _ensure_gray_u8(gray)
 
     try:
-        ok, data_list, points, _ = det.detectAndDecodeMulti(img)
+        symbols = [ZBarSymbol.QRCODE] if ZBarSymbol is not None else None
+        results = _zbar_decode(gray, symbols=symbols)  # type: ignore[arg-type]
     except Exception:
         return []
 
-    if not ok or not data_list:
-        return []
-
-    results: List[QRResult] = []
-    for i, data in enumerate(data_list):
-        if not data:
+    out: List[QRResult] = []
+    for r in results or []:
+        if getattr(r, "type", None) != "QRCODE":
             continue
-        corners = points[i].astype(np.float32) if points is not None else None
-        bbox = _bbox_from_corners(corners) if corners is not None else None
-        results.append(QRResult(payload=data, corners=corners, bbox=bbox, method="multi"))
-    return results
+
+        data = getattr(r, "data", b"") or b""
+        payload = data.decode("utf-8", errors="replace") if isinstance(data, (bytes, bytearray)) else str(data)
+
+        rect = getattr(r, "rect", None)
+        bbox = None
+        if rect is not None:
+            bbox = (int(rect.left), int(rect.top), int(rect.width), int(rect.height))
+
+        poly = getattr(r, "polygon", None)
+        corners = None
+        if poly:
+            pts = [(float(p.x), float(p.y)) for p in poly]
+            if len(pts) >= 4:
+                corners = np.asarray(pts[:4], dtype=float)
+
+        out.append(QRResult(payload=payload, corners=corners, bbox=bbox, method=method))
+
+    return out
 
 
-def decode_single(img: np.ndarray, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
-    """
-    Decode a single QR code from an image using OpenCV.
-    Optionally accept a shared QRCodeDetector instance for performance.
-    """
-    if det is None:
-        det = cv2.QRCodeDetector()
+# ---------------------------------------------------------------------
+# OpenCV QRCodeDetector
+# ---------------------------------------------------------------------
+_DETECTOR = cv2.QRCodeDetector()
+
+
+def decode_multi(gray: np.ndarray, *, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
+    if gray is None:
+        return []
+    gray = _ensure_gray_u8(gray)
+    detector = det or _DETECTOR
 
     try:
-        data, pts, _ = det.detectAndDecode(img)
+        ok, decoded_info, points, _ = detector.detectAndDecodeMulti(gray)
+    except Exception:
+        return []
+
+    if not ok or not decoded_info:
+        return []
+
+    out: List[QRResult] = []
+    for i, payload in enumerate(decoded_info):
+        if not payload:
+            continue
+        pts_i = None
+        if points is not None and len(points) > i:
+            pts_i = points[i]
+        corners = None
+        if pts_i is not None:
+            corners = np.asarray(pts_i, dtype=float).reshape(-1, 2)
+        bbox = _points_to_bbox(pts_i)
+        out.append(QRResult(payload=str(payload), corners=corners, bbox=bbox, method="multi"))
+    return out
+
+
+def decode_single(gray: np.ndarray, *, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
+    if gray is None:
+        return []
+    gray = _ensure_gray_u8(gray)
+    detector = det or _DETECTOR
+
+    try:
+        data, points, _ = detector.detectAndDecode(gray)
     except Exception:
         return []
 
     if not data:
         return []
 
-    corners = pts.astype(np.float32) if pts is not None else None
-    bbox = _bbox_from_corners(corners) if corners is not None else None
-    return [QRResult(payload=data, corners=corners, bbox=bbox, method="single")]
+    corners = None
+    if points is not None:
+        corners = np.asarray(points, dtype=float).reshape(-1, 2)
+    bbox = _points_to_bbox(points)
+    return [QRResult(payload=str(data), corners=corners, bbox=bbox, method="single")]
 
 
-# ----------------------------
-# pyzbar (zbar) decoder
-# ----------------------------
-
-def decode_pyzbar(img: np.ndarray) -> List[QRResult]:
-    """
-    Decode QR codes using pyzbar/zbar.
-    Works great on "real world" / branded QRs where OpenCV often fails.
-
-    Input must be a single-channel grayscale uint8 image (pyzbar can handle
-    other shapes too, but we keep it strict and fast here).
-    """
+def decode_curved(gray: np.ndarray, *, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
+    if gray is None:
+        return []
+    gray = _ensure_gray_u8(gray)
+    detector = det or _DETECTOR
+    fn = getattr(detector, "detectAndDecodeCurved", None)
+    if fn is None:
+        return []
     try:
-        from pyzbar.pyzbar import decode as zbar_decode
+        data, points, _ = fn(gray)
     except Exception:
         return []
-
-    if img is None:
+    if not data:
         return []
+    corners = None
+    if points is not None:
+        corners = np.asarray(points, dtype=float).reshape(-1, 2)
+    bbox = _points_to_bbox(points)
+    return [QRResult(payload=str(data), corners=corners, bbox=bbox, method="curved")]
 
-    if img.ndim != 2:
-        # Convert to grayscale if a BGR image was passed accidentally
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    if img.dtype != np.uint8:
-        img = img.astype(np.uint8, copy=False)
+# ---------------------------------------------------------------------
+# ZXing C++ backend (strong fallback)
+# ---------------------------------------------------------------------
+try:
+    import zxingcpp  # type: ignore
+
+    _HAS_ZXING = True
+except Exception:
+    zxingcpp = None
+    _HAS_ZXING = False
+
+
+def decode_zxing(gray: np.ndarray, *, max_symbols: int = 16, method: str = "zxing") -> List[QRResult]:
+    if not _HAS_ZXING or gray is None:
+        return []
+    gray = _ensure_gray_u8(gray)
+
+    try:
+        # Keep API-compatible: zxingcpp.read_barcodes(image) works across versions.
+        hits = zxingcpp.read_barcodes(gray)  # type: ignore[attr-defined]
+    except Exception:
+        return []
 
     out: List[QRResult] = []
-    try:
-        hits = zbar_decode(img)
-    except Exception:
-        return []
-
-    for h in hits:
-        data = h.data.decode("utf-8", errors="replace") if hasattr(h, "data") else ""
-        if not data:
+    for h in hits[:max_symbols]:
+        fmt = getattr(h, "format", None)
+        if fmt is not None and "qr" not in str(fmt).lower():
+            continue
+        payload = getattr(h, "text", "") or ""
+        if not payload:
             continue
 
         bbox = None
         corners = None
+        pos = getattr(h, "position", None)
+        if pos is not None:
+            pts = []
+            for key in ("top_left", "top_right", "bottom_right", "bottom_left"):
+                p = getattr(pos, key, None)
+                if p is not None:
+                    pts.append((float(p.x), float(p.y)))
+            if len(pts) == 4:
+                corners = np.asarray(pts, dtype=float)
+                bbox = _points_to_bbox(corners)
 
-        # rect: left, top, width, height
-        if hasattr(h, "rect") and h.rect is not None:
-            bbox = (int(h.rect.left), int(h.rect.top), int(h.rect.width), int(h.rect.height))
+        out.append(QRResult(payload=payload, corners=corners, bbox=bbox, method=method))
+    return out
 
-        # polygon: list of points
-        if hasattr(h, "polygon") and h.polygon:
-            pts = np.array([(p.x, p.y) for p in h.polygon], dtype=np.float32)
-            corners = pts
-            if bbox is None and len(pts) >= 4:
-                bbox = _bbox_from_corners(pts)
 
-        out.append(QRResult(payload=data, corners=corners, bbox=bbox, method="pyzbar"))
+# ---------------------------------------------------------------------
+# Junk removal / cleanup variants (generic)
+# ---------------------------------------------------------------------
+def cleanup_variants(gray: np.ndarray) -> List[Tuple[str, np.ndarray]]:
+    """
+    Produce a small, bounded set of cleaned images intended to remove
+    stylization "junk" and make a QR look like a normal binary module grid.
+
+    Keep this cheap: no big loops, no huge parameter sweeps.
+    """
+    g = _ensure_gray_u8(gray)
+    out: List[Tuple[str, np.ndarray]] = []
+
+    # A) slight denoise helps thresholding
+    dn = cv2.fastNlMeansDenoising(g, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    out.append(("dn", dn))
+
+    # B) Otsu binarize (and invert)
+    _, th = cv2.threshold(dn, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    out.append(("otsu", th))
+    out.append(("otsu_inv", cv2.bitwise_not(th)))
+
+    # C) Adaptive threshold (and invert)
+    ath = cv2.adaptiveThreshold(
+        dn, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31, 2
+    )
+    out.append(("ath", ath))
+    out.append(("ath_inv", cv2.bitwise_not(ath)))
+
+    # D) Morphology to “square up” rounded modules / fill logos a bit
+    k3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    k5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+
+    # close fills gaps / suppresses logo holes
+    out.append(("otsu_close3", cv2.morphologyEx(th, cv2.MORPH_CLOSE, k3, iterations=1)))
+    out.append(("otsu_close5", cv2.morphologyEx(th, cv2.MORPH_CLOSE, k5, iterations=1)))
+
+    # open removes speckle
+    out.append(("ath_open3", cv2.morphologyEx(ath, cv2.MORPH_OPEN, k3, iterations=1)))
+
+    # E) A “strong cleanup” variant: close then open on inverted binary
+    inv = cv2.bitwise_not(th)
+    strong = cv2.morphologyEx(inv, cv2.MORPH_CLOSE, k5, iterations=2)
+    strong = cv2.morphologyEx(strong, cv2.MORPH_OPEN, k3, iterations=1)
+    out.append(("strong_inv", strong))
 
     return out
+
+
+# ---------------------------------------------------------------------
+# High-level attempt helpers
+# ---------------------------------------------------------------------
+def decode_pyzbar_fast(gray: np.ndarray) -> List[QRResult]:
+    if gray is None or not _HAS_PYZBAR:
+        return []
+    g = _ensure_gray_u8(gray)
+
+    for tag, img in [("gray", g), ("blur3", cv2.GaussianBlur(g, (3, 3), 0))]:
+        hits = _decode_pyzbar(img, method=f"pyzbar_{tag}")
+        if hits:
+            return hits
+
+    # Try cleaned variants (bounded set)
+    for tag, img in cleanup_variants(g):
+        hits = _decode_pyzbar(img, method=f"pyzbar_clean_{tag}")
+        if hits:
+            return hits
+
+    return []
 
 ```
 
@@ -1847,16 +2051,46 @@ def scan_and_classify(image_path: str, *, max_results: int = 8) -> List[ScanHit]
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
+import os
+import logging
+
 import cv2
 import numpy as np
+from PIL import Image, ImageOps
 
-from .decode import decode_multi, decode_single, decode_pyzbar, QRDecodeError
+from .decode import (
+    QRDecodeError,
+    decode_multi,
+    decode_single,
+    decode_curved,
+    decode_pyzbar_fast,
+    decode_zxing,
+    cleanup_variants,
+)
 from .models import QRResult
 
+_LOG = logging.getLogger("qrpypass.qr")
+_DEBUG = os.getenv("QRPYPASS_QR_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
 
-# ----------------------------
-# Ranking / selection helpers
-# ----------------------------
+
+def _init_logging() -> None:
+    if not _LOG.handlers:
+        logging.basicConfig(level=logging.DEBUG if _DEBUG else logging.INFO)
+    if _DEBUG:
+        _LOG.setLevel(logging.DEBUG)
+
+    # Pillow is extremely noisy when root logger is DEBUG.
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+    logging.getLogger("PIL.TiffImagePlugin").setLevel(logging.WARNING)
+
+
+_init_logging()
+
+
+def _dbg(msg: str, *args) -> None:
+    if _DEBUG:
+        _LOG.debug(msg, *args)
+
 
 def _bbox_area(b: Optional[Tuple[int, int, int, int]]) -> int:
     if not b:
@@ -1867,30 +2101,33 @@ def _bbox_area(b: Optional[Tuple[int, int, int, int]]) -> int:
 
 def _method_rank(method: str) -> int:
     """
-    Lower is better.
-    We prefer:
-      - pyzbar on ROI (most robust for real-world/branded QRs)
-      - pyzbar on full image
-      - OpenCV multi/single on ROI
-      - OpenCV full image
-      - fallbacks
+    Lower is better. Order reflects practical “SOTA in the wild”:
+    WeChatQRCode > ZXing(cleaned) > pyzbar > OpenCV > ZXing(raw) > warps/tiles.
     """
     m = (method or "").lower()
-    if m.startswith("roi_pyzbar:"):
+
+    if m.startswith("wechat"):
         return 0
-    if m.startswith("pyzbar:"):
+
+    if m.startswith("zxing_clean"):
         return 1
-    if m.startswith("roi_multi:"):
+
+    if m.startswith("pyzbar"):
         return 2
-    if m.startswith("roi_single:"):
+
+    if m in ("multi", "single", "curved"):
         return 3
-    if m == "multi":
+
+    if m.startswith("zxing_full"):
         return 4
-    if m == "single":
+
+    if m.startswith("wechat_warp") or m.startswith("zxing_warp") or m.startswith("opencv_warp"):
         return 5
-    if m.startswith("fallback_"):
-        return 9
-    return 10
+
+    if m.startswith("zxing_tile") or m.startswith("wechat_tile") or m.startswith("opencv_tile"):
+        return 6
+
+    return 9
 
 
 def _better(a: QRResult, b: QRResult) -> QRResult:
@@ -1906,270 +2143,334 @@ def _better(a: QRResult, b: QRResult) -> QRResult:
     return a if _bbox_area(a.bbox) <= _bbox_area(b.bbox) else b
 
 
-# ----------------------------
-# Cheap preprocessing (ROI only)
-# ----------------------------
-
-def _clahe(gray: np.ndarray) -> np.ndarray:
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    return clahe.apply(gray)
+def _consider(best: Dict[str, QRResult], r: QRResult) -> None:
+    if not r.payload:
+        return
+    cur = best.get(r.payload)
+    best[r.payload] = r if cur is None else _better(cur, r)
 
 
-def _unsharp(gray: np.ndarray) -> np.ndarray:
-    blur = cv2.GaussianBlur(gray, (0, 0), 1.0)
-    return cv2.addWeighted(gray, 1.6, blur, -0.6, 0)
+def _ordered(best: Dict[str, QRResult], max_results: int) -> List[QRResult]:
+    ordered = sorted(best.values(), key=lambda r: (_method_rank(r.method), _bbox_area(r.bbox)))
+    return ordered[:max_results]
 
 
-def _adaptive_thresh(gray: np.ndarray, block: int = 31, c: int = 2) -> np.ndarray:
-    block = int(block)
-    if block % 2 == 0:
-        block += 1
-    block = max(9, min(block, 101))
-    return cv2.adaptiveThreshold(
-        gray, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        block, int(c)
-    )
+def _load_image_bgr_exif(image_path: str) -> np.ndarray:
+    """
+    Always honor EXIF orientation. This matters for phone photos where
+    Orientation=6 is common (90deg rotation).
+    """
+    try:
+        im = Image.open(image_path)
+    except Exception as e:
+        raise QRDecodeError(f"Image could not be read: {image_path} ({e})")
+
+    try:
+        im = ImageOps.exif_transpose(im)
+    except Exception:
+        # If exif is broken or missing, just continue.
+        pass
+
+    im = im.convert("RGB")
+    arr = np.array(im)  # RGB uint8
+    bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    return bgr
 
 
-def _resize(gray: np.ndarray, scale: float) -> np.ndarray:
-    h, w = gray.shape[:2]
-    nh = max(1, int(h * scale))
-    nw = max(1, int(w * scale))
-    # INTER_AREA is a good default for downscale; can “de-noise” and help zbar
-    interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC
-    return cv2.resize(gray, (nw, nh), interpolation=interp)
+# ---------------------------------------------------------------------
+# WeChat QRCode (OpenCV contrib)
+# ---------------------------------------------------------------------
+def _wechat_detector():
+    ctor = getattr(cv2, "wechat_qrcode_WeChatQRCode", None)
+    if ctor is None:
+        return None
+    try:
+        # In opencv-contrib-python wheels this works without passing model paths.
+        return ctor()
+    except Exception:
+        return None
 
 
-# ----------------------------
-# Candidate detection (fast)
-# ----------------------------
-
-def _merge_boxes(boxes: List[Tuple[int, int, int, int]], iou_thresh: float = 0.25) -> List[Tuple[int, int, int, int]]:
-    if not boxes:
+def _decode_wechat(det, bgr: np.ndarray, *, method: str = "wechat") -> List[QRResult]:
+    if det is None or bgr is None:
+        return []
+    try:
+        texts, points = det.detectAndDecode(bgr)
+    except Exception:
         return []
 
-    def iou(a, b) -> float:
-        ax, ay, aw, ah = a
-        bx, by, bw, bh = b
-        ax2, ay2 = ax + aw, ay + ah
-        bx2, by2 = bx + bw, by + bh
-
-        ix1, iy1 = max(ax, bx), max(ay, by)
-        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-        iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
-        inter = iw * ih
-        if inter <= 0:
-            return 0.0
-        union = aw * ah + bw * bh - inter
-        return float(inter) / float(max(1, union))
-
-    boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
-    keep: List[Tuple[int, int, int, int]] = []
-
-    for b in boxes:
-        merged = False
-        for i, k in enumerate(keep):
-            if iou(b, k) >= iou_thresh:
-                x1 = min(b[0], k[0])
-                y1 = min(b[1], k[1])
-                x2 = max(b[0] + b[2], k[0] + k[2])
-                y2 = max(b[1] + b[3], k[1] + k[3])
-                keep[i] = (x1, y1, x2 - x1, y2 - y1)
-                merged = True
-                break
-        if not merged:
-            keep.append(b)
-
-    return keep
-
-
-def _find_qr_candidates(gray: np.ndarray, *, max_candidates: int = 6) -> List[Tuple[int, int, int, int]]:
-    h, w = gray.shape[:2]
-    img_area = h * w
-
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blur, 80, 160)
-
-    k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, k, iterations=1)
-
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    candidates: List[Tuple[int, int, int, int, float]] = []
-    min_area = img_area * 0.003
-    max_area = img_area * 0.60
-
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < min_area or area > max_area:
-            continue
-
-        x, y, bw, bh = cv2.boundingRect(cnt)
-        if bw < 80 or bh < 80:
-            continue
-
-        aspect = bw / float(bh)
-        if not (0.72 <= aspect <= 1.35):
-            continue
-
-        roi_edges = edges[y:y + bh, x:x + bw]
-        density = float(np.count_nonzero(roi_edges)) / float(max(1, roi_edges.size))
-        if density < 0.06:
-            continue
-
-        score = (bw * bh) * (0.5 + density)
-        candidates.append((x, y, bw, bh, score))
-
-    if not candidates:
+    if texts is None:
         return []
+    if isinstance(texts, str):
+        texts = [texts]
 
-    candidates.sort(key=lambda t: t[4], reverse=True)
-    boxes = [(x, y, bw, bh) for (x, y, bw, bh, _) in candidates[: max_candidates * 3]]
-    merged = _merge_boxes(boxes, iou_thresh=0.25)
-    merged = sorted(merged, key=lambda b: b[2] * b[3], reverse=True)
-    return merged[:max_candidates]
+    out: List[QRResult] = []
+    for i, payload in enumerate(texts):
+        if not payload:
+            continue
+
+        pts_i = None
+        if points is not None and len(points) > i:
+            pts_i = points[i]
+
+        corners = None
+        bbox = None
+        if pts_i is not None:
+            corners = np.asarray(pts_i, dtype=float).reshape(-1, 2)
+            x1 = float(np.min(corners[:, 0]))
+            y1 = float(np.min(corners[:, 1]))
+            x2 = float(np.max(corners[:, 0]))
+            y2 = float(np.max(corners[:, 1]))
+            bbox = (int(round(x1)), int(round(y1)), int(round(max(1.0, x2 - x1))), int(round(max(1.0, y2 - y1))))
+
+        out.append(QRResult(payload=str(payload), corners=corners, bbox=bbox, method=method))
+    return out
 
 
-def _pad_box(box: Tuple[int, int, int, int], *, w: int, h: int, pad_ratio: float = 0.14) -> Tuple[int, int, int, int]:
-    x, y, bw, bh = box
-    pad = int(max(bw, bh) * pad_ratio)
-    x1 = max(0, x - pad)
-    y1 = max(0, y - pad)
-    x2 = min(w, x + bw + pad)
-    y2 = min(h, y + bh + pad)
-    return x1, y1, max(1, x2 - x1), max(1, y2 - y1)
+# ---------------------------------------------------------------------
+# Quad warp fallback: find likely QR square and unskew it
+# ---------------------------------------------------------------------
+def _order_quad(pts: np.ndarray) -> np.ndarray:
+    pts = np.asarray(pts, dtype=np.float32).reshape(4, 2)
+    s = pts.sum(axis=1)
+    d = np.diff(pts, axis=1).reshape(-1)
+    tl = pts[np.argmin(s)]
+    br = pts[np.argmax(s)]
+    tr = pts[np.argmin(d)]
+    bl = pts[np.argmax(d)]
+    return np.stack([tl, tr, br, bl], axis=0)
 
 
-# ----------------------------
-# Main API
-# ----------------------------
+def _warp_from_quad(gray: np.ndarray, quad: np.ndarray, size: int = 900) -> np.ndarray:
+    quad = _order_quad(quad)
+    dst = np.array([[0, 0], [size - 1, 0], [size - 1, size - 1], [0, size - 1]], dtype=np.float32)
+    M = cv2.getPerspectiveTransform(quad.astype(np.float32), dst)
+    return cv2.warpPerspective(gray, M, (size, size), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+
+def _find_candidate_quads(gray: np.ndarray, *, max_quads: int = 6) -> List[np.ndarray]:
+    """
+    Heuristic: find large-ish 4-point contours that could be a QR boundary.
+    This does not “decode”, it only finds a plausible square so we can warp.
+    """
+    g = gray
+    if g.ndim == 3:
+        g = cv2.cvtColor(g, cv2.COLOR_BGR2GRAY)
+
+    # Edge emphasis
+    blur = cv2.GaussianBlur(g, (5, 5), 0)
+    edges = cv2.Canny(blur, 60, 160)
+    edges = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+
+    cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    H, W = g.shape[:2]
+    img_area = float(H * W)
+
+    quads: List[Tuple[float, np.ndarray]] = []
+    for c in cnts:
+        area = cv2.contourArea(c)
+        if area < 0.01 * img_area:
+            continue
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        if len(approx) != 4:
+            continue
+        if not cv2.isContourConvex(approx):
+            continue
+
+        pts = approx.reshape(4, 2).astype(np.float32)
+
+        # Squareness check (loose)
+        quad = _order_quad(pts)
+        def _dist(a, b): return float(np.linalg.norm(a - b))
+        w1 = _dist(quad[0], quad[1])
+        w2 = _dist(quad[3], quad[2])
+        h1 = _dist(quad[0], quad[3])
+        h2 = _dist(quad[1], quad[2])
+        w = (w1 + w2) / 2.0
+        h = (h1 + h2) / 2.0
+        if min(w, h) <= 0:
+            continue
+        aspect = max(w, h) / min(w, h)
+        if aspect > 1.35:
+            continue
+
+        # Prefer bigger quads
+        score = area
+        quads.append((score, quad))
+
+    quads.sort(key=lambda t: t[0], reverse=True)
+    return [q for _, q in quads[:max_quads]]
+
+
+def _tile_params(h: int, w: int) -> Tuple[int, int]:
+    tile = 1100 if max(h, w) >= 3000 else 900
+    overlap = 260
+    return tile, overlap
+
 
 def scan_qr_anywhere(image_path: str, *, max_results: int = 8) -> List[QRResult]:
-    img = cv2.imread(image_path)
-    if img is None:
+    bgr = _load_image_bgr_exif(image_path)
+    if bgr is None:
         raise QRDecodeError(f"Image could not be read: {image_path}")
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     H, W = gray.shape[:2]
+
+    _dbg("scan: image_path=%s max_results=%d", image_path, max_results)
+    _dbg("scan: loaded image shape=%s gray_shape=%s", getattr(bgr, "shape", None), getattr(gray, "shape", None))
 
     best: Dict[str, QRResult] = {}
 
-    def consider(r: QRResult):
-        if not r.payload:
-            return
-        cur = best.get(r.payload)
-        best[r.payload] = r if cur is None else _better(cur, r)
+    # ------------------------------------------------------------
+    # 0) WeChatQRCode on full image (SOTA for messy/stylized codes)
+    # ------------------------------------------------------------
+    wechat = _wechat_detector()
+    if wechat is not None:
+        _dbg("stage 0: wechat (opencv-contrib) on full image (if available)")
+        hits = _decode_wechat(wechat, bgr, method="wechat")
+        _dbg("stage 0: wechat hit(s)=%d", len(hits))
+        for r in hits:
+            _consider(best, r)
+        if best:
+            return _ordered(best, max_results)
 
-    def finalize() -> List[QRResult]:
-        ordered = sorted(best.values(), key=lambda r: (_method_rank(r.method), _bbox_area(r.bbox)))
-        return ordered[:max_results]
+    # ------------------------------------------------------------
+    # 0.5) OpenCV QRCodeDetector (baseline)
+    # ------------------------------------------------------------
+    _dbg("stage 0.5: OpenCV QRCodeDetector on full image")
+    det = cv2.QRCodeDetector()
+    for r in decode_multi(gray, det=det):
+        _consider(best, r)
+    for r in decode_single(gray, det=det):
+        _consider(best, r)
+    for r in decode_curved(gray, det=det):
+        _consider(best, r)
+    if best:
+        return _ordered(best, max_results)
 
-    # ----------------------------
-    # 1) Find likely QR regions (fast)
-    # ----------------------------
-    candidates = _find_qr_candidates(gray, max_candidates=6)
+    # ------------------------------------------------------------
+    # 1) ZXing on cleaned variants (junk removal)
+    # ------------------------------------------------------------
+    _dbg("stage 1: zxing on cleaned variants")
+    for tag, cleaned in cleanup_variants(gray):
+        zhits = decode_zxing(cleaned, method=f"zxing_clean_{tag}")
+        _dbg("  zxing_clean_%s hit(s)=%d", tag, len(zhits))
+        for r in zhits:
+            _consider(best, r)
+        if best:
+            return _ordered(best, max_results)
 
-    # If finder misses, fall back to "whole image as ROI"
-    # (Still low CPU because pyzbar attempts start with downscale)
-    if not candidates:
-        candidates = [(0, 0, W, H)]
+    # ------------------------------------------------------------
+    # 2) pyzbar fallback (fast; can hit some cases)
+    # ------------------------------------------------------------
+    _dbg("stage 2: pyzbar_fast on full image")
+    hits = decode_pyzbar_fast(gray)
+    _dbg("stage 2: pyzbar_fast hit(s)=%d", len(hits))
+    for r in hits:
+        _consider(best, r)
+    if best:
+        return _ordered(best, max_results)
 
-    # ----------------------------
-    # 2) Crop + decode via pyzbar (primary path)
-    # ----------------------------
-    for box in candidates:
-        x, y, bw, bh = _pad_box(box, w=W, h=H, pad_ratio=0.14)
-        roi = gray[y:y + bh, x:x + bw]
-        if roi.size == 0:
-            continue
+    # ------------------------------------------------------------
+    # 3) ZXing on raw full image
+    # ------------------------------------------------------------
+    _dbg("stage 3: zxing on raw full image")
+    zhits = decode_zxing(gray, method="zxing_full")
+    _dbg("stage 3: zxing_full hit(s)=%d", len(zhits))
+    for r in zhits:
+        _consider(best, r)
+    if best:
+        return _ordered(best, max_results)
 
-        # Minimal, high-value variant set (fast; proven for your images)
-        variants: List[Tuple[str, np.ndarray, float]] = []
+    # ------------------------------------------------------------
+    # 4) Quad warp fallback (try to detect the square and flatten it)
+    # ------------------------------------------------------------
+    _dbg("stage 4: quad-warp fallback")
+    quads = _find_candidate_quads(gray, max_quads=6)
+    _dbg("stage 4: quad candidates=%d", len(quads))
 
-        # Key trick: try a small downscale first (helps 3649 in particular)
-        variants.append(("gray_s075", _resize(roi, 0.75), 0.75))
-        variants.append(("gray", roi, 1.0))
+    for qi, quad in enumerate(quads):
+        warped = _warp_from_quad(gray, quad, size=900)
+        warped_bgr = cv2.cvtColor(warped, cv2.COLOR_GRAY2BGR)
 
-        c1 = _clahe(roi)
-        variants.append(("clahe", c1, 1.0))
+        if wechat is not None:
+            wh = _decode_wechat(wechat, warped_bgr, method=f"wechat_warp_{qi}")
+            _dbg("  wechat_warp_%d hit(s)=%d", qi, len(wh))
+            for r in wh:
+                _consider(best, r)
+            if best:
+                return _ordered(best, max_results)
 
-        us = _unsharp(c1)
-        variants.append(("unsharp", us, 1.0))
+        # Run ZXing on cleaned warp (often very effective)
+        for tag, cleaned in cleanup_variants(warped):
+            zwh = decode_zxing(cleaned, method=f"zxing_warp_{qi}_{tag}")
+            for r in zwh:
+                _consider(best, r)
+            if best:
+                return _ordered(best, max_results)
 
-        th = _adaptive_thresh(us, block=31, c=2)
-        variants.append(("ath", th, 1.0))
-        variants.append(("ath_inv", cv2.bitwise_not(th), 1.0))
+        # OpenCV on warp as well
+        for r in decode_multi(warped, det=det):
+            _consider(best, QRResult(payload=r.payload, corners=r.corners, bbox=r.bbox, method=f"opencv_warp_{qi}_multi"))
+        for r in decode_single(warped, det=det):
+            _consider(best, QRResult(payload=r.payload, corners=r.corners, bbox=r.bbox, method=f"opencv_warp_{qi}_single"))
+        for r in decode_curved(warped, det=det):
+            _consider(best, QRResult(payload=r.payload, corners=r.corners, bbox=r.bbox, method=f"opencv_warp_{qi}_curved"))
+        if best:
+            return _ordered(best, max_results)
 
-        for tag, v, scale in variants:
-            hits = decode_pyzbar(v)
-            for r in hits:
-                mapped_bbox = None
-                mapped_corners = None
+    # ------------------------------------------------------------
+    # 5) Tiling fallback (last resort)
+    # ------------------------------------------------------------
+    _dbg("stage 5: tiling fallback")
+    tile, overlap = _tile_params(H, W)
+    step = max(1, tile - overlap)
+    _dbg("tiling: tile=%d overlap=%d step=%d", tile, overlap, step)
 
-                # Map bbox/corners from variant->ROI->full image.
-                # If we downscaled, scale coords back up.
-                sx = 1.0 / scale if scale != 1.0 else 1.0
+    for y in range(0, H, step):
+        for x in range(0, W, step):
+            crop = gray[y : y + tile, x : x + tile]
+            if crop.size == 0:
+                continue
 
-                if r.bbox is not None:
-                    bx, by, rw, rh = r.bbox
-                    bx = int(bx * sx)
-                    by = int(by * sx)
-                    rw = int(rw * sx)
-                    rh = int(rh * sx)
-                    mapped_bbox = (x + bx, y + by, rw, rh)
+            # Strongest tile approach: cleaned ZXing
+            for tag, cleaned in cleanup_variants(crop):
+                for r in decode_zxing(cleaned, method=f"zxing_tile_{tag}"):
+                    mapped_bbox = None
+                    mapped_corners = None
+                    if r.bbox:
+                        bx, by, bw, bh = r.bbox
+                        mapped_bbox = (x + bx, y + by, bw, bh)
+                    if r.corners is not None:
+                        mapped_corners = r.corners.copy()
+                        mapped_corners[:, 0] += x
+                        mapped_corners[:, 1] += y
+                    _consider(best, QRResult(payload=r.payload, bbox=mapped_bbox, corners=mapped_corners, method=f"zxing_tile_{tag}"))
 
-                if r.corners is not None and r.corners.size >= 2:
-                    pts = r.corners.copy()
-                    pts[:, 0] *= sx
-                    pts[:, 1] *= sx
-                    pts[:, 0] += x
-                    pts[:, 1] += y
-                    mapped_corners = pts
+                if best:
+                    return _ordered(best, max_results)
 
-                consider(QRResult(
-                    payload=r.payload,
-                    corners=mapped_corners,
-                    bbox=mapped_bbox,
-                    method=f"roi_pyzbar:{tag}"
-                ))
+            # Optional: tile OpenCV baseline
+            for r in decode_multi(crop, det=det):
+                if not r.payload:
+                    continue
+                bbox = None
+                corners = None
+                if r.bbox:
+                    bx, by, bw, bh = r.bbox
+                    bbox = (x + bx, y + by, bw, bh)
+                if r.corners is not None:
+                    corners = r.corners.copy()
+                    corners[:, 0] += x
+                    corners[:, 1] += y
+                _consider(best, QRResult(payload=r.payload, bbox=bbox, corners=corners, method="opencv_tile_multi"))
 
             if best:
-                return finalize()
+                return _ordered(best, max_results)
 
-    # ----------------------------
-    # 3) Fallback: OpenCV QRCodeDetector (secondary)
-    # ----------------------------
-    det = cv2.QRCodeDetector()
-
-    # Full image once
-    for r in decode_multi(gray, det=det):
-        consider(r)
-    for r in decode_single(gray, det=det):
-        consider(r)
-
-    if best:
-        return finalize()
-
-    # ROI attempt (very bounded)
-    for box in candidates[:3]:
-        x, y, bw, bh = _pad_box(box, w=W, h=H, pad_ratio=0.14)
-        roi = gray[y:y + bh, x:x + bw]
-        if roi.size == 0:
-            continue
-
-        # tiny set
-        for tag, v in [("gray", roi), ("clahe", _clahe(roi))]:
-            for r in decode_multi(v, det=det):
-                consider(QRResult(payload=r.payload, corners=None, bbox=None, method=f"roi_multi:{tag}"))
-            for r in decode_single(v, det=det):
-                consider(QRResult(payload=r.payload, corners=None, bbox=None, method=f"roi_single:{tag}"))
-
-        if best:
-            return finalize()
-
-    return finalize()
+    _dbg("scan: FAILED - no QR decoded after all stages")
+    return _ordered(best, max_results)
 
 
 def decode_first(image_path: str) -> str:
@@ -6668,9 +6969,6 @@ if __name__ == "__main__":
 <summary>📁 Final Project Structure</summary>
 
 ```
-📁 dist/
-    📄 qrpypass-0.2.2-py3-none-any.whl
-    📄 qrpypass-0.2.2.tar.gz
 📁 images/
     📄 qr-logo.png
     📄 qr.png
@@ -6724,6 +7022,7 @@ if __name__ == "__main__":
     📁 qrpypass.egg-info/
         📄 dependency_links.txt
         📄 PKG-INFO
+        📄 requires.txt
         📄 SOURCES.txt
         📄 top_level.txt
 📁 test/

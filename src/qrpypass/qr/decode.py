@@ -18,7 +18,11 @@ def _ensure_gray_u8(img: np.ndarray) -> np.ndarray:
     if img.ndim == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     if img.dtype != np.uint8:
-        img = img.astype(np.uint8, copy=False)
+        # Clip if needed (e.g., float images)
+        if np.issubdtype(img.dtype, np.floating):
+            img = np.clip(img, 0, 255).astype(np.uint8)
+        else:
+            img = img.astype(np.uint8, copy=False)
     return img
 
 
@@ -183,7 +187,9 @@ def decode_zxing(gray: np.ndarray, *, max_symbols: int = 16, method: str = "zxin
     if not _HAS_ZXING or gray is None:
         return []
     gray = _ensure_gray_u8(gray)
+
     try:
+        # Keep API-compatible: zxingcpp.read_barcodes(image) works across versions.
         hits = zxingcpp.read_barcodes(gray)  # type: ignore[attr-defined]
     except Exception:
         return []
