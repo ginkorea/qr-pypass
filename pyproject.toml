@@ -1,6 +1,6 @@
 [project]
 name = "qrpypass"
-version = "0.2.0"
+version = "0.2.1"
 description = "Headless QR decoder + TOTP authenticator Flask mini-service"
 readme = "README.md"
 requires-python = ">=3.9"
