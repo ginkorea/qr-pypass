@@ -1,19 +1,5 @@
 from __future__ import annotations
 
-"""
-QR decoding backends.
-
-Goal:
-- Cheap first, heavy last.
-- Add a robust C++ backend (ZXing) for cases where OpenCV + zbar miss entirely.
-
-Backends:
-  1) pyzbar/zbar (if installed)
-  2) OpenCV QRCodeDetector: multi + single
-  3) OpenCV detectAndDecodeCurved (often helps on perspective/warped photos)
-  4) zxing-cpp (C++ ZXing) (very strong fallback)
-"""
-
 from typing import List, Optional, Tuple
 
 import cv2
@@ -26,9 +12,16 @@ class QRDecodeError(RuntimeError):
     pass
 
 
-# ---------------------------------------------------------------------
-# Utilities
-# ---------------------------------------------------------------------
+def _ensure_gray_u8(img: np.ndarray) -> np.ndarray:
+    if img is None:
+        return img
+    if img.ndim == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if img.dtype != np.uint8:
+        img = img.astype(np.uint8, copy=False)
+    return img
+
+
 def _points_to_bbox(points: Optional[np.ndarray]) -> Optional[Tuple[int, int, int, int]]:
     if points is None:
         return None
@@ -47,18 +40,8 @@ def _points_to_bbox(points: Optional[np.ndarray]) -> Optional[Tuple[int, int, in
     )
 
 
-def _ensure_gray_u8(img: np.ndarray) -> np.ndarray:
-    if img is None:
-        return img
-    if img.ndim == 3:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    if img.dtype != np.uint8:
-        img = img.astype(np.uint8, copy=False)
-    return img
-
-
 # ---------------------------------------------------------------------
-# Optional: pyzbar / zbar
+# pyzbar / zbar
 # ---------------------------------------------------------------------
 try:
     from pyzbar.pyzbar import decode as _zbar_decode  # type: ignore
@@ -88,10 +71,7 @@ def _decode_pyzbar(gray: np.ndarray, *, method: str) -> List[QRResult]:
             continue
 
         data = getattr(r, "data", b"") or b""
-        try:
-            payload = data.decode("utf-8", errors="replace")
-        except Exception:
-            payload = str(data)
+        payload = data.decode("utf-8", errors="replace") if isinstance(data, (bytes, bytearray)) else str(data)
 
         rect = getattr(r, "rect", None)
         bbox = None
@@ -110,44 +90,8 @@ def _decode_pyzbar(gray: np.ndarray, *, method: str) -> List[QRResult]:
     return out
 
 
-def decode_pyzbar_fast(gray: np.ndarray) -> List[QRResult]:
-    """
-    Fast, low-CPU pyzbar attempts.
-    """
-    if gray is None or not _HAS_PYZBAR:
-        return []
-    gray = _ensure_gray_u8(gray)
-
-    hits = _decode_pyzbar(gray, method="pyzbar_gray")
-    if hits:
-        return hits
-
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    hits = _decode_pyzbar(blur, method="pyzbar_blur3")
-    if hits:
-        return hits
-
-    try:
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
-        hits = _decode_pyzbar(clahe, method="pyzbar_clahe")
-        if hits:
-            return hits
-    except Exception:
-        pass
-
-    try:
-        sharp = cv2.addWeighted(gray, 1.5, cv2.GaussianBlur(gray, (0, 0), 1.0), -0.5, 0)
-        hits = _decode_pyzbar(sharp, method="pyzbar_sharp")
-        if hits:
-            return hits
-    except Exception:
-        pass
-
-    return []
-
-
 # ---------------------------------------------------------------------
-# OpenCV detector (reused)
+# OpenCV QRCodeDetector
 # ---------------------------------------------------------------------
 _DETECTOR = cv2.QRCodeDetector()
 
@@ -203,27 +147,19 @@ def decode_single(gray: np.ndarray, *, det: Optional[cv2.QRCodeDetector] = None)
 
 
 def decode_curved(gray: np.ndarray, *, det: Optional[cv2.QRCodeDetector] = None) -> List[QRResult]:
-    """
-    OpenCV curved decode path. Can help when the QR is perspective-warped or curved.
-    Not all OpenCV builds expose this; we guard it safely.
-    """
     if gray is None:
         return []
     gray = _ensure_gray_u8(gray)
     detector = det or _DETECTOR
-
     fn = getattr(detector, "detectAndDecodeCurved", None)
     if fn is None:
         return []
-
     try:
         data, points, _ = fn(gray)
     except Exception:
         return []
-
     if not data:
         return []
-
     corners = None
     if points is not None:
         corners = np.asarray(points, dtype=float).reshape(-1, 2)
@@ -232,7 +168,7 @@ def decode_curved(gray: np.ndarray, *, det: Optional[cv2.QRCodeDetector] = None)
 
 
 # ---------------------------------------------------------------------
-# Optional: ZXing C++ backend
+# ZXing C++ backend (strong fallback)
 # ---------------------------------------------------------------------
 try:
     import zxingcpp  # type: ignore
@@ -244,17 +180,10 @@ except Exception:
 
 
 def decode_zxing(gray: np.ndarray, *, max_symbols: int = 16, method: str = "zxing") -> List[QRResult]:
-    """
-    Robust C++ QR decode via zxing-cpp.
-    Works well when OpenCV/zbar fail to even detect.
-    """
     if not _HAS_ZXING or gray is None:
         return []
-
     gray = _ensure_gray_u8(gray)
-
     try:
-        # returns list of Barcodes
         hits = zxingcpp.read_barcodes(gray)  # type: ignore[attr-defined]
     except Exception:
         return []
@@ -262,15 +191,12 @@ def decode_zxing(gray: np.ndarray, *, max_symbols: int = 16, method: str = "zxin
     out: List[QRResult] = []
     for h in hits[:max_symbols]:
         fmt = getattr(h, "format", None)
-        if fmt is not None and str(fmt).lower().find("qr") == -1:
-            # Keep it strict: only QR
+        if fmt is not None and "qr" not in str(fmt).lower():
             continue
-
         payload = getattr(h, "text", "") or ""
         if not payload:
             continue
 
-        # position may exist; best-effort bbox/corners
         bbox = None
         corners = None
         pos = getattr(h, "position", None)
@@ -285,5 +211,78 @@ def decode_zxing(gray: np.ndarray, *, max_symbols: int = 16, method: str = "zxin
                 bbox = _points_to_bbox(corners)
 
         out.append(QRResult(payload=payload, corners=corners, bbox=bbox, method=method))
+    return out
+
+
+# ---------------------------------------------------------------------
+# Junk removal / cleanup variants (generic)
+# ---------------------------------------------------------------------
+def cleanup_variants(gray: np.ndarray) -> List[Tuple[str, np.ndarray]]:
+    """
+    Produce a small, bounded set of cleaned images intended to remove
+    stylization "junk" and make a QR look like a normal binary module grid.
+
+    Keep this cheap: no big loops, no huge parameter sweeps.
+    """
+    g = _ensure_gray_u8(gray)
+    out: List[Tuple[str, np.ndarray]] = []
+
+    # A) slight denoise helps thresholding
+    dn = cv2.fastNlMeansDenoising(g, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    out.append(("dn", dn))
+
+    # B) Otsu binarize (and invert)
+    _, th = cv2.threshold(dn, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    out.append(("otsu", th))
+    out.append(("otsu_inv", cv2.bitwise_not(th)))
+
+    # C) Adaptive threshold (and invert)
+    ath = cv2.adaptiveThreshold(
+        dn, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31, 2
+    )
+    out.append(("ath", ath))
+    out.append(("ath_inv", cv2.bitwise_not(ath)))
+
+    # D) Morphology to “square up” rounded modules / fill logos a bit
+    k3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    k5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+
+    # close fills gaps / suppresses logo holes
+    out.append(("otsu_close3", cv2.morphologyEx(th, cv2.MORPH_CLOSE, k3, iterations=1)))
+    out.append(("otsu_close5", cv2.morphologyEx(th, cv2.MORPH_CLOSE, k5, iterations=1)))
+
+    # open removes speckle
+    out.append(("ath_open3", cv2.morphologyEx(ath, cv2.MORPH_OPEN, k3, iterations=1)))
+
+    # E) A “strong cleanup” variant: close then open on inverted binary
+    inv = cv2.bitwise_not(th)
+    strong = cv2.morphologyEx(inv, cv2.MORPH_CLOSE, k5, iterations=2)
+    strong = cv2.morphologyEx(strong, cv2.MORPH_OPEN, k3, iterations=1)
+    out.append(("strong_inv", strong))
 
     return out
+
+
+# ---------------------------------------------------------------------
+# High-level attempt helpers
+# ---------------------------------------------------------------------
+def decode_pyzbar_fast(gray: np.ndarray) -> List[QRResult]:
+    if gray is None or not _HAS_PYZBAR:
+        return []
+    g = _ensure_gray_u8(gray)
+
+    for tag, img in [("gray", g), ("blur3", cv2.GaussianBlur(g, (3, 3), 0))]:
+        hits = _decode_pyzbar(img, method=f"pyzbar_{tag}")
+        if hits:
+            return hits
+
+    # Try cleaned variants (bounded set)
+    for tag, img in cleanup_variants(g):
+        hits = _decode_pyzbar(img, method=f"pyzbar_clean_{tag}")
+        if hits:
+            return hits
+
+    return []

@@ -18,8 +18,8 @@ setup(
         # QR generation
         "qrcode[pil]>=7.4.2",
 
-        # Computer vision
-        "opencv-python>=4.8.0",
+        # Computer vision (opencv-contrib includes WeChatQRCode)
+        "opencv-contrib-python>=4.8.0",
 
         # Decoders (soft-fail at runtime if system libs missing)
         "pyzbar>=0.1.9",
